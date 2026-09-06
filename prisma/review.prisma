@@ -1,0 +1,51 @@
+model ReviewSubmission {
+  id             String   @id @default(cuid())
+  researchItemId String
+  designerId     String
+  roundNumber    Int
+  imageUrl       String
+  imagePublicId  String
+  submittedAt    DateTime @default(now())
+
+  researchItem ResearchItem       @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  designer     User               @relation(fields: [designerId], references: [id], onDelete: Restrict)
+  annotations  ReviewAnnotation[]
+
+  @@unique([researchItemId, roundNumber])
+  @@index([designerId])
+  @@index([submittedAt])
+}
+
+model ReviewAnnotation {
+  id                 String   @id @default(cuid())
+  reviewSubmissionId String
+  createdById        String
+  x                  Float
+  y                  Float
+  comment            String
+  resolved           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  reviewSubmission ReviewSubmission  @relation(fields: [reviewSubmissionId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  replies          AnnotationReply[]
+
+  @@index([reviewSubmissionId])
+  @@index([createdById])
+  @@index([resolved])
+}
+
+model AnnotationReply {
+  id           String   @id @default(cuid())
+  annotationId String
+  createdById  String
+  message      String
+  createdAt    DateTime @default(now())
+
+  annotation ReviewAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
+  createdBy  User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([annotationId])
+  @@index([createdById])
+  @@index([createdAt])
+}
