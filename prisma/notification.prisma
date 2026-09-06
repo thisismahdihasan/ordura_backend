@@ -1,0 +1,17 @@
+model Notification {
+  id             String   @id @default(cuid())
+  userId         String
+  type           String
+  title          String
+  message        String
+  researchItemId String?
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  researchItem ResearchItem? @relation(fields: [researchItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@index([researchItemId])
+}

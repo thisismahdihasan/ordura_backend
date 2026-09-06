@@ -19,4 +19,5 @@ model User {
   finalAssetsUploaded      FinalAsset[]
   listingAssignments       ListingAssignment[]
   listingResults           ListingResult[]
+  notifications            Notification[]
 }
