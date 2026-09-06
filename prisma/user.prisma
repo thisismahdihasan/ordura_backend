@@ -8,4 +8,5 @@ model User {
 
   ownedWorkspace Workspace?
   memberships    WorkspaceMember[]
+  sentInvites    WorkspaceInvite[]
 }

@@ -7,6 +7,7 @@ model Workspace {
 
   owner   User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   members WorkspaceMember[]
+  invites WorkspaceInvite[]
 }
 
 model WorkspaceMember {

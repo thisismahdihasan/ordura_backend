@@ -1,0 +1,17 @@
+model WorkspaceInvite {
+  id          String          @id @default(cuid())
+  workspaceId String
+  email       String
+  roles       WorkspaceRole[]
+  tokenHash   String          @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String
+  createdAt   DateTime        @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, email])
+  @@index([expiresAt])
+}
