@@ -1,0 +1,15 @@
+model DesignAssignment {
+  id             String    @id @default(cuid())
+  researchItemId String
+  designerId     String
+  assignedAt     DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  isCurrent      Boolean   @default(true)
+
+  researchItem ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  designer     User         @relation(fields: [designerId], references: [id], onDelete: Restrict)
+
+  @@index([researchItemId, isCurrent])
+  @@index([designerId])
+}

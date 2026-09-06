@@ -10,4 +10,7 @@ model User {
   memberships          WorkspaceMember[]
   sentInvites          WorkspaceInvite[]
   researchItemsCreated ResearchItem[]
+  designAssignments    DesignAssignment[]
+  issuesReported       IssueReport[]      @relation("ReportedIssues")
+  issuesResolved       IssueReport[]      @relation("ResolvedIssues")
 }

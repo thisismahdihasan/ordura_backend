@@ -1,0 +1,19 @@
+model IssueReport {
+  id             String    @id @default(cuid())
+  researchItemId String
+  reportedById   String
+  reason         String
+  details        String?
+  resolvedAt     DateTime?
+  resolvedById   String?
+  createdAt      DateTime  @default(now())
+
+  researchItem ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  reportedBy   User         @relation("ReportedIssues", fields: [reportedById], references: [id], onDelete: Restrict)
+  resolvedBy   User?        @relation("ResolvedIssues", fields: [resolvedById], references: [id], onDelete: Restrict)
+
+  @@index([researchItemId])
+  @@index([reportedById])
+  @@index([resolvedById])
+  @@index([resolvedAt])
+}

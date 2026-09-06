@@ -14,6 +14,9 @@ model ResearchItem {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
+  designAssignments DesignAssignment[]
+  issueReports      IssueReport[]
+
   @@unique([workspaceId, etsyListingId])
   @@index([createdById])
   @@index([status])
