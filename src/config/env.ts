@@ -19,6 +19,12 @@ const envSchema = z.object({
     )
     .default("7d"),
   COOKIE_NAME: z.string().default("ordura_token"),
+  SMTP_HOST: z.string().min(1, "SMTP_HOST is required"),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().min(1, "SMTP_USER is required"),
+  SMTP_PASS: z.string().min(1, "SMTP_PASS is required"),
+  SMTP_FROM: z.string().min(1, "SMTP_FROM is required"),
+  FRONTEND_INVITE_URL: z.string().url("FRONTEND_INVITE_URL must be a valid URL"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

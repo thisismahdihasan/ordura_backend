@@ -1,6 +1,8 @@
 import { WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
+import { sendMail } from "../../services/mail.service.js";
+import { buildInviteEmail } from "./workspaceInvite.email.js";
 import { generateInviteToken, hashInviteToken } from "./workspaceInvite.helper.js";
 import { CreateWorkspaceInviteInput } from "./workspaceInvite.validation.js";
 import { CreateWorkspaceInviteResult } from "./workspaceInvite.type.js";
@@ -27,6 +29,11 @@ export const createWorkspaceInvite = async (
     },
     select: {
       workspaceId: true,
+      workspace: {
+        select: {
+          name: true,
+        },
+      },
     },
   });
 
@@ -86,9 +93,32 @@ export const createWorkspaceInvite = async (
     select: safeWorkspaceInviteSelect,
   });
 
-  // NOTE: Returning raw inviteToken is temporary for Phase 2C.1 testing until email sending is implemented in Phase 2C.2
+  const emailContent = buildInviteEmail({
+    workspaceName: adminMembership.workspace.name,
+    roles: input.roles,
+    rawToken,
+  });
+
+  try {
+    await sendMail({
+      to: input.email,
+      subject: emailContent.subject,
+      text: emailContent.text,
+      html: emailContent.html,
+    });
+  } catch (error) {
+    await prisma.workspaceInvite
+      .delete({
+        where: { id: invite.id },
+      })
+      .catch(() => {
+        // Silently catch deletion failure to ensure primary error is thrown
+      });
+
+    throw new ApiError(500, "Failed to send invitation email");
+  }
+
   return {
     invite,
-    inviteToken: rawToken,
   };
 };

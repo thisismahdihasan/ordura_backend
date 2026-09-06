@@ -11,5 +11,4 @@ export type SafeWorkspaceInvite = {
 
 export type CreateWorkspaceInviteResult = {
   invite: SafeWorkspaceInvite;
-  inviteToken: string; // Temporary for Phase 2C.1 until email service is implemented in Phase 2C.2
 };
