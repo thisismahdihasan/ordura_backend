@@ -1,5 +1,6 @@
 import express, { Router } from "express";
 import { HealthRoutes } from "../modules/health/health.route.js";
+import { AuthRoutes } from "../modules/auth/auth.route.js";
 
 const router: Router = express.Router();
 
@@ -12,6 +13,10 @@ const moduleRoutes: ModuleRoute[] = [
   {
     path: "/health",
     route: HealthRoutes,
+  },
+  {
+    path: "/auth",
+    route: AuthRoutes,
   },
 ];
 

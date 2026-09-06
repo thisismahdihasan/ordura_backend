@@ -10,6 +10,15 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   FRONTEND_URL: z.string().url("FRONTEND_URL must be a valid URL"),
+  JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(
+      /^\d+[smhdwy]$/,
+      "JWT_EXPIRES_IN must be a valid timespan (e.g. 7d, 24h, 3600s)"
+    )
+    .default("7d"),
+  COOKIE_NAME: z.string().default("ordura_token"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

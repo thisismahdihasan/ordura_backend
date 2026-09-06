@@ -1,4 +1,6 @@
 import { ErrorRequestHandler, Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
+import { Prisma } from "@prisma/client";
 import { ApiError } from "../shared/ApiError.js";
 import { env } from "../config/env.js";
 
@@ -20,7 +22,18 @@ export const globalErrorHandler: ErrorRequestHandler = (
   let isOperational = false;
   let stack: string | undefined = undefined;
 
-  if (err instanceof ApiError) {
+  if (err instanceof ZodError) {
+    statusCode = 400;
+    message = err.issues.map((issue) => issue.message).join(", ") || "Validation failed";
+    isOperational = true;
+  } else if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2002"
+  ) {
+    statusCode = 409;
+    message = "A resource with this identifier already exists";
+    isOperational = true;
+  } else if (err instanceof ApiError) {
     statusCode = err.statusCode;
     message = err.message;
     isOperational = err.isOperational;
