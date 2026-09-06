@@ -1,0 +1,6 @@
+enum WorkspaceRole {
+  ADMIN
+  RESEARCHER
+  DESIGNER
+  LISTER
+}
