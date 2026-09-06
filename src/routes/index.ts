@@ -2,6 +2,7 @@ import express, { Router } from "express";
 import { HealthRoutes } from "../modules/health/health.route.js";
 import { AuthRoutes } from "../modules/auth/auth.route.js";
 import { WorkspaceRoutes } from "../modules/workspace/workspace.route.js";
+import { WorkspaceInviteRoutes } from "../modules/workspaceInvite/workspaceInvite.route.js";
 
 const router: Router = express.Router();
 
@@ -22,6 +23,10 @@ const moduleRoutes: ModuleRoute[] = [
   {
     path: "/workspaces",
     route: WorkspaceRoutes,
+  },
+  {
+    path: "/workspace/invites",
+    route: WorkspaceInviteRoutes,
   },
 ];
 
