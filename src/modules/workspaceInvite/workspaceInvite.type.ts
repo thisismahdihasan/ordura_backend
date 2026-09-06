@@ -12,3 +12,27 @@ export type SafeWorkspaceInvite = {
 export type CreateWorkspaceInviteResult = {
   invite: SafeWorkspaceInvite;
 };
+
+export type SafeWorkspaceMember = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  roles: WorkspaceRole[];
+  createdAt: Date;
+};
+
+export type SafeAcceptedInvite = {
+  id: string;
+  acceptedAt: Date | null;
+};
+
+export type SafeWorkspaceSummary = {
+  id: string;
+  name: string;
+};
+
+export type AcceptWorkspaceInviteResult = {
+  membership: SafeWorkspaceMember;
+  workspace: SafeWorkspaceSummary;
+  invite: SafeAcceptedInvite;
+};

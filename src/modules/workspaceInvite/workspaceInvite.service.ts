@@ -1,11 +1,14 @@
-import { WorkspaceRole } from "@prisma/client";
+import { Prisma, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { sendMail } from "../../services/mail.service.js";
 import { buildInviteEmail } from "./workspaceInvite.email.js";
 import { generateInviteToken, hashInviteToken } from "./workspaceInvite.helper.js";
 import { CreateWorkspaceInviteInput } from "./workspaceInvite.validation.js";
-import { CreateWorkspaceInviteResult } from "./workspaceInvite.type.js";
+import {
+  AcceptWorkspaceInviteResult,
+  CreateWorkspaceInviteResult,
+} from "./workspaceInvite.type.js";
 
 const INVITE_EXPIRY_HOURS = 24;
 
@@ -15,6 +18,14 @@ const safeWorkspaceInviteSelect = {
   email: true,
   roles: true,
   expiresAt: true,
+  createdAt: true,
+} as const;
+
+const safeWorkspaceMemberSelect = {
+  id: true,
+  workspaceId: true,
+  userId: true,
+  roles: true,
   createdAt: true,
 } as const;
 
@@ -122,3 +133,112 @@ export const createWorkspaceInvite = async (
     invite,
   };
 };
+
+export const acceptWorkspaceInvite = async (
+  userId: string,
+  userEmail: string,
+  rawToken: string
+): Promise<AcceptWorkspaceInviteResult> => {
+  const tokenHash = hashInviteToken(rawToken);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const invite = await tx.workspaceInvite.findUnique({
+        where: { tokenHash },
+        select: {
+          id: true,
+          workspaceId: true,
+          email: true,
+          roles: true,
+          expiresAt: true,
+          acceptedAt: true,
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!invite) {
+        throw new ApiError(400, "Invalid invitation");
+      }
+
+      if (invite.acceptedAt !== null) {
+        throw new ApiError(409, "Invitation has already been accepted");
+      }
+
+      if (invite.expiresAt.getTime() <= Date.now()) {
+        throw new ApiError(410, "Invitation has expired");
+      }
+
+      if (invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+        throw new ApiError(
+          403,
+          "This invitation was sent to a different email address"
+        );
+      }
+
+      const existingMember = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: invite.workspaceId,
+            userId,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (existingMember) {
+        throw new ApiError(409, "User is already a member of this workspace");
+      }
+
+      const updatedCount = await tx.workspaceInvite.updateMany({
+        where: {
+          id: invite.id,
+          acceptedAt: null,
+        },
+        data: {
+          acceptedAt: new Date(),
+        },
+      });
+
+      if (updatedCount.count === 0) {
+        throw new ApiError(409, "Invitation has already been accepted");
+      }
+
+      const membership = await tx.workspaceMember.create({
+        data: {
+          workspaceId: invite.workspaceId,
+          userId,
+          roles: invite.roles,
+        },
+        select: safeWorkspaceMemberSelect,
+      });
+
+      const acceptedInvite = await tx.workspaceInvite.findUniqueOrThrow({
+        where: { id: invite.id },
+        select: {
+          id: true,
+          acceptedAt: true,
+        },
+      });
+
+      return {
+        membership,
+        workspace: invite.workspace,
+        invite: acceptedInvite,
+      };
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new ApiError(409, "User is already a member of this workspace");
+    }
+    throw error;
+  }
+};
+

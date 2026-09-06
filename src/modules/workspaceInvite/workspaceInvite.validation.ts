@@ -18,3 +18,14 @@ export const createWorkspaceInviteSchema = z.object({
 });
 
 export type CreateWorkspaceInviteInput = z.infer<typeof createWorkspaceInviteSchema>;
+
+export const acceptWorkspaceInviteParamsSchema = z.object({
+  token: z
+    .string({ message: "Invitation token is required" })
+    .trim()
+    .min(1, "Invitation token cannot be empty"),
+});
+
+export type AcceptWorkspaceInviteParams = z.infer<
+  typeof acceptWorkspaceInviteParamsSchema
+>;
