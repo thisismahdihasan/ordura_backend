@@ -17,6 +17,7 @@ model ResearchItem {
   designAssignments DesignAssignment[]
   issueReports      IssueReport[]
   reviewSubmissions ReviewSubmission[]
+  finalAssets       FinalAsset[]
 
   @@unique([workspaceId, etsyListingId])
   @@index([createdById])

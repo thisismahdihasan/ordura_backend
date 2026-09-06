@@ -16,4 +16,5 @@ model User {
   reviewSubmissions        ReviewSubmission[]
   reviewAnnotationsCreated ReviewAnnotation[]
   annotationRepliesCreated AnnotationReply[]
+  finalAssetsUploaded      FinalAsset[]
 }

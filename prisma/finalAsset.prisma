@@ -1,0 +1,17 @@
+model FinalAsset {
+  id             String   @id @default(cuid())
+  researchItemId String
+  driveFileId    String   @unique
+  fileName       String
+  fileSize       BigInt
+  mimeType       String
+  uploadedById   String
+  uploadedAt     DateTime @default(now())
+
+  researchItem ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([researchItemId])
+  @@index([uploadedById])
+  @@index([uploadedAt])
+}
