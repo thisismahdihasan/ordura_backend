@@ -1,0 +1,47 @@
+import express, { Express, Request, Response } from "express";
+import helmet from "helmet";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import router from "./routes/index.js";
+import { notFound } from "./middleware/notFound.js";
+import { globalErrorHandler } from "./middleware/globalErrorHandler.js";
+import { ApiResponse } from "./shared/ApiResponse.js";
+import { env } from "./config/env.js";
+
+const app: Express = express();
+
+// 1. Helmet for security headers
+app.use(helmet());
+
+// 2. CORS with environment-driven frontend origin and credentials enabled
+app.use(
+  cors({
+    origin: env.FRONTEND_URL,
+    credentials: true,
+  })
+);
+
+// 3. Request body parsers with 1mb limits
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+// 4. Cookie parser
+app.use(cookieParser());
+
+// 5. Routes
+app.get("/", (_req: Request, res: Response) => {
+  ApiResponse.success(res, {
+    message: "Ordura backend is running",
+  });
+});
+
+// Central API router
+app.use("/api/v1", router);
+
+// 6. 404 handler
+app.use(notFound);
+
+// 7. Global error handler
+app.use(globalErrorHandler);
+
+export default app;
