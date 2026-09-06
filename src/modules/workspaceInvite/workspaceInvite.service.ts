@@ -31,25 +31,81 @@ const safeWorkspaceMemberSelect = {
 
 export const createWorkspaceInvite = async (
   callerUserId: string,
-  input: CreateWorkspaceInviteInput
+  input: CreateWorkspaceInviteInput,
+  targetWorkspaceId?: string
 ): Promise<CreateWorkspaceInviteResult> => {
-  const adminMembership = await prisma.workspaceMember.findFirst({
-    where: {
-      userId: callerUserId,
-      roles: { has: WorkspaceRole.ADMIN },
-    },
-    select: {
-      workspaceId: true,
-      workspace: {
-        select: {
-          name: true,
+  let workspaceId: string;
+  let workspaceName: string;
+
+  if (targetWorkspaceId && targetWorkspaceId.trim().length > 0) {
+    const trimmedId = targetWorkspaceId.trim();
+    const membership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: trimmedId,
+          userId: callerUserId,
         },
       },
-    },
-  });
+      select: {
+        roles: true,
+        workspace: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
 
-  if (!adminMembership) {
-    throw new ApiError(403, "Only workspace admins can create invites");
+    if (!membership || !membership.roles.includes(WorkspaceRole.ADMIN)) {
+      throw new ApiError(403, "Only workspace admins can create invites");
+    }
+
+    workspaceId = trimmedId;
+    workspaceName = membership.workspace.name;
+  } else {
+    // If no target workspace specified, first check if caller owns a workspace
+    const ownedWorkspace = await prisma.workspace.findUnique({
+      where: { ownerId: callerUserId },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (ownedWorkspace) {
+      workspaceId = ownedWorkspace.id;
+      workspaceName = ownedWorkspace.name;
+    } else {
+      // If caller does not own a workspace, check their admin memberships
+      const adminMemberships = await prisma.workspaceMember.findMany({
+        where: {
+          userId: callerUserId,
+          roles: { has: WorkspaceRole.ADMIN },
+        },
+        select: {
+          workspaceId: true,
+          workspace: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (adminMemberships.length === 0) {
+        throw new ApiError(403, "Only workspace admins can create invites");
+      }
+
+      if (adminMemberships.length > 1) {
+        throw new ApiError(
+          400,
+          "You are an admin in multiple workspaces. Please specify the target workspace ID in the request route."
+        );
+      }
+
+      workspaceId = adminMemberships[0].workspaceId;
+      workspaceName = adminMemberships[0].workspace.name;
+    }
   }
 
   const existingUser = await prisma.user.findUnique({
@@ -61,7 +117,7 @@ export const createWorkspaceInvite = async (
     const existingMember = await prisma.workspaceMember.findUnique({
       where: {
         workspaceId_userId: {
-          workspaceId: adminMembership.workspaceId,
+          workspaceId,
           userId: existingUser.id,
         },
       },
@@ -75,7 +131,7 @@ export const createWorkspaceInvite = async (
 
   const activeInvite = await prisma.workspaceInvite.findFirst({
     where: {
-      workspaceId: adminMembership.workspaceId,
+      workspaceId,
       email: input.email,
       acceptedAt: null,
       expiresAt: { gt: new Date() },
@@ -93,7 +149,7 @@ export const createWorkspaceInvite = async (
 
   const invite = await prisma.workspaceInvite.create({
     data: {
-      workspaceId: adminMembership.workspaceId,
+      workspaceId,
       email: input.email,
       roles: input.roles,
       tokenHash,
@@ -105,7 +161,7 @@ export const createWorkspaceInvite = async (
   });
 
   const emailContent = buildInviteEmail({
-    workspaceName: adminMembership.workspace.name,
+    workspaceName,
     roles: input.roles,
     rawToken,
   });
@@ -118,13 +174,16 @@ export const createWorkspaceInvite = async (
       html: emailContent.html,
     });
   } catch (error) {
-    await prisma.workspaceInvite
-      .delete({
+    try {
+      await prisma.workspaceInvite.delete({
         where: { id: invite.id },
-      })
-      .catch(() => {
-        // Silently catch deletion failure to ensure primary error is thrown
       });
+    } catch (cleanupError) {
+      console.error(
+        "CRITICAL: Failed to clean up orphan workspace invite after email delivery failure:",
+        cleanupError
+      );
+    }
 
     throw new ApiError(500, "Failed to send invitation email");
   }

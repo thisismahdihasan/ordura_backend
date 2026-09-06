@@ -16,8 +16,15 @@ export const createInvite = async (
 ): Promise<void> => {
   const authReq = req as AuthenticatedRequest;
   const validatedInput = createWorkspaceInviteSchema.parse(req.body);
+  const rawWorkspaceId = req.params?.workspaceId;
+  const targetWorkspaceId =
+    typeof rawWorkspaceId === "string" ? rawWorkspaceId : undefined;
 
-  const result = await createWorkspaceInvite(authReq.user.id, validatedInput);
+  const result = await createWorkspaceInvite(
+    authReq.user.id,
+    validatedInput,
+    targetWorkspaceId
+  );
 
   ApiResponse.success(res, {
     statusCode: 201,
