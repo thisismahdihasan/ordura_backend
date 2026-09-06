@@ -1,0 +1,29 @@
+model ListingAssignment {
+  id             String    @id @default(cuid())
+  researchItemId String
+  listerId       String
+  assignedAt     DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  isCurrent      Boolean   @default(true)
+
+  researchItem ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  lister       User         @relation(fields: [listerId], references: [id], onDelete: Restrict)
+
+  @@index([researchItemId, isCurrent])
+  @@index([listerId])
+}
+
+model ListingResult {
+  id             String   @id @default(cuid())
+  researchItemId String   @unique
+  etsyListingUrl String?
+  listedById     String
+  listedAt       DateTime @default(now())
+
+  researchItem ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  listedBy     User         @relation(fields: [listedById], references: [id], onDelete: Restrict)
+
+  @@index([listedById])
+  @@index([listedAt])
+}

@@ -11,10 +11,12 @@ model User {
   sentInvites              WorkspaceInvite[]
   researchItemsCreated     ResearchItem[]
   designAssignments        DesignAssignment[]
-  issuesReported           IssueReport[]      @relation("ReportedIssues")
-  issuesResolved           IssueReport[]      @relation("ResolvedIssues")
+  issuesReported           IssueReport[]       @relation("ReportedIssues")
+  issuesResolved           IssueReport[]       @relation("ResolvedIssues")
   reviewSubmissions        ReviewSubmission[]
   reviewAnnotationsCreated ReviewAnnotation[]
   annotationRepliesCreated AnnotationReply[]
   finalAssetsUploaded      FinalAsset[]
+  listingAssignments       ListingAssignment[]
+  listingResults           ListingResult[]
 }
