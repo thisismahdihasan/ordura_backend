@@ -1,0 +1,21 @@
+model ResearchItem {
+  id                String         @id @default(cuid())
+  workspaceId       String
+  etsyListingId     String
+  originalUrl       String
+  normalizedUrl     String
+  title             String?
+  referenceImageUrl String?
+  createdById       String
+  status            ResearchStatus @default(RESEARCHED)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, etsyListingId])
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+}

@@ -6,7 +6,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  ownedWorkspace Workspace?
-  memberships    WorkspaceMember[]
-  sentInvites    WorkspaceInvite[]
+  ownedWorkspace       Workspace?
+  memberships          WorkspaceMember[]
+  sentInvites          WorkspaceInvite[]
+  researchItemsCreated ResearchItem[]
 }
