@@ -5,7 +5,7 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner         User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner         User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   members       WorkspaceMember[]
   invites       WorkspaceInvite[]
   researchItems ResearchItem[]
