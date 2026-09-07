@@ -3,6 +3,7 @@ import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "./research.helper.js";
 import { fetchEtsyMetadata } from "./research.metadata.js";
+import { findLeastWorkloadDesigner } from "./research.assignment.js";
 import {
   CreateResearchItemInput,
   GetResearchItemsQueryInput,
@@ -94,20 +95,44 @@ export const createResearchItem = async (
     metadata = { title: null, referenceImageUrl: null };
   }
 
-  // 3. Create ResearchItem with database concurrency protection
+  // 3. Atomically create ResearchItem and auto-assign eligible designer if available
   try {
-    const createdItem = await prisma.researchItem.create({
-      data: {
-        workspaceId,
-        etsyListingId,
-        originalUrl,
-        normalizedUrl,
-        title: metadata.title,
-        referenceImageUrl: metadata.referenceImageUrl,
-        createdById: userId,
-        status: ResearchStatus.RESEARCHED,
-      },
-      select: safeResearchItemSelect,
+    const createdItem = await prisma.$transaction(async (tx) => {
+      const chosenDesignerId = await findLeastWorkloadDesigner(
+        tx,
+        workspaceId
+      );
+
+      const initialStatus = chosenDesignerId
+        ? ResearchStatus.ASSIGNED
+        : ResearchStatus.RESEARCHED;
+
+      const item = await tx.researchItem.create({
+        data: {
+          workspaceId,
+          etsyListingId,
+          originalUrl,
+          normalizedUrl,
+          title: metadata.title,
+          referenceImageUrl: metadata.referenceImageUrl,
+          createdById: userId,
+          status: initialStatus,
+        },
+        select: safeResearchItemSelect,
+      });
+
+      if (chosenDesignerId) {
+        await tx.designAssignment.create({
+          data: {
+            researchItemId: item.id,
+            designerId: chosenDesignerId,
+            isCurrent: true,
+          },
+          select: { id: true },
+        });
+      }
+
+      return item;
     });
 
     return createdItem;
