@@ -1,4 +1,4 @@
-import { Prisma, ResearchStatus } from "@prisma/client";
+import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "./research.helper.js";
@@ -11,6 +11,7 @@ import {
 import {
   DuplicateResearchItemData,
   EtsyMetadata,
+  ReassignedResearchItemData,
   ResearchItemListResult,
   SafeResearchItem,
   SafeResearchItemDetail,
@@ -309,5 +310,135 @@ export const getReferenceImageData = async (
     id: item.id,
     referenceImageUrl: item.referenceImageUrl.trim(),
   };
+};
+
+export const REASSIGNABLE_STATUSES: ResearchStatus[] = [
+  ResearchStatus.RESEARCHED,
+  ResearchStatus.ASSIGNED,
+  ResearchStatus.DESIGN_IN_PROGRESS,
+  ResearchStatus.DESIGN_REVIEW,
+  ResearchStatus.CORRECTION_NEEDED,
+  ResearchStatus.ISSUE_REPORTED,
+];
+
+export const reassignResearchDesigner = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string
+): Promise<ReassignedResearchItemData> => {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Serialize/lock row and verify item existence within workspace
+    let lockedItem;
+    try {
+      lockedItem = await tx.researchItem.update({
+        where: {
+          id: researchItemId,
+          workspaceId,
+        },
+        data: { updatedAt: new Date() },
+        select: { id: true, status: true },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
+        throw new ApiError(404, "Research item not found");
+      }
+      throw error;
+    }
+
+    // 2. Status eligibility check on fresh/locked state
+    if (!REASSIGNABLE_STATUSES.includes(lockedItem.status)) {
+      throw new ApiError(409, "Research item can no longer be reassigned");
+    }
+
+    // 4. Validate target designer in same workspace
+    const targetMember = await tx.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: designerId,
+        },
+      },
+      select: {
+        userId: true,
+        roles: true,
+      },
+    });
+
+    if (!targetMember || !targetMember.roles.includes(WorkspaceRole.DESIGNER)) {
+      throw new ApiError(
+        400,
+        "Selected user is not a designer in this workspace"
+      );
+    }
+
+    // 5. Inspect current assignment
+    const currentAssignment = await tx.designAssignment.findFirst({
+      where: {
+        researchItemId,
+        isCurrent: true,
+      },
+      select: {
+        id: true,
+        designerId: true,
+      },
+    });
+
+    // 6. Same designer conflict check
+    if (currentAssignment && currentAssignment.designerId === designerId) {
+      throw new ApiError(
+        409,
+        "Research item is already assigned to this designer"
+      );
+    }
+
+    // 7. Mark existing current assignment historical
+    if (currentAssignment) {
+      await tx.designAssignment.updateMany({
+        where: {
+          researchItemId,
+          isCurrent: true,
+        },
+        data: {
+          isCurrent: false,
+        },
+      });
+    }
+
+    // 8. Create new current assignment
+    const newAssignment = await tx.designAssignment.create({
+      data: {
+        researchItemId,
+        designerId,
+        isCurrent: true,
+      },
+      select: {
+        id: true,
+        designerId: true,
+        assignedAt: true,
+        isCurrent: true,
+      },
+    });
+
+    // 9. Status transition logic
+    let finalStatus = lockedItem.status;
+    if (lockedItem.status === ResearchStatus.RESEARCHED) {
+      await tx.researchItem.update({
+        where: { id: researchItemId },
+        data: { status: ResearchStatus.ASSIGNED },
+      });
+      finalStatus = ResearchStatus.ASSIGNED;
+    }
+
+    return {
+      researchItem: {
+        id: lockedItem.id,
+        status: finalStatus,
+      },
+      assignment: newAssignment,
+    };
+  });
 };
 

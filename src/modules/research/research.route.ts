@@ -3,7 +3,13 @@ import { WorkspaceRole } from "@prisma/client";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
-import { create, getById, getReferenceImage, list } from "./research.controller.js";
+import {
+  create,
+  getById,
+  getReferenceImage,
+  list,
+  reassignDesigner,
+} from "./research.controller.js";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -24,6 +30,13 @@ router.get(
     WorkspaceRole.LISTER
   ),
   catchAsync(list)
+);
+
+router.patch(
+  "/:researchItemId/designer",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(reassignDesigner)
 );
 
 router.get(

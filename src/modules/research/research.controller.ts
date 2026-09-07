@@ -12,12 +12,14 @@ import {
   getReferenceImageData,
   getResearchItemById,
   getResearchItems,
+  reassignResearchDesigner,
 } from "./research.service.js";
 import {
   createResearchItemSchema,
   getReferenceImageQuerySchema,
   getResearchItemParamsSchema,
   getResearchItemsQuerySchema,
+  reassignDesignerBodySchema,
 } from "./research.validation.js";
 
 export const create = async (
@@ -132,6 +134,28 @@ export const getReferenceImage = async (
         res.destroy(err);
       }
     }
+  });
+};
+
+export const reassignDesigner = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, researchItemId } = getResearchItemParamsSchema.parse(
+    req.params
+  );
+  const validatedBody = reassignDesignerBodySchema.parse(req.body);
+
+  const result = await reassignResearchDesigner(
+    workspaceId,
+    researchItemId,
+    validatedBody.designerId
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Designer reassigned successfully",
+    data: result,
   });
 };
 

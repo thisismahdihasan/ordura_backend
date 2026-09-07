@@ -67,3 +67,15 @@ export type ResearchItemListResult = {
 
 export type SafeResearchItemDetail = SafeResearchItemListItem;
 
+export type ReassignedResearchItemData = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  assignment: {
+    id: string;
+    designerId: string;
+    assignedAt: Date;
+    isCurrent: boolean;
+  };
+};

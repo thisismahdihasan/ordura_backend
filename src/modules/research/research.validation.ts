@@ -90,3 +90,16 @@ export const getReferenceImageQuerySchema = z.object({
 export type GetReferenceImageQueryInput = z.infer<
   typeof getReferenceImageQuerySchema
 >;
+
+export const reassignDesignerBodySchema = z
+  .object({
+    designerId: z
+      .string({ message: "designerId is required" })
+      .trim()
+      .min(1, "designerId is required"),
+  })
+  .strict();
+
+export type ReassignDesignerBodyInput = z.infer<
+  typeof reassignDesignerBodySchema
+>;
