@@ -12,6 +12,7 @@ import {
   EtsyMetadata,
   ResearchItemListResult,
   SafeResearchItem,
+  SafeResearchItemDetail,
 } from "./research.type.js";
 
 export const safeResearchItemSelect = {
@@ -235,3 +236,23 @@ export const getResearchItems = async (
     },
   };
 };
+
+export const getResearchItemById = async (
+  workspaceId: string,
+  researchItemId: string
+): Promise<SafeResearchItemDetail> => {
+  const researchItem = await prisma.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: safeResearchItemListSelect,
+  });
+
+  if (!researchItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  return researchItem;
+};
+

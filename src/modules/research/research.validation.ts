@@ -70,3 +70,12 @@ export const getResearchItemsQuerySchema = z.object({
 export type GetResearchItemsQueryInput = z.infer<
   typeof getResearchItemsQuerySchema
 >;
+
+export const getResearchItemParamsSchema = z.object({
+  workspaceId: z.string().trim().min(1, "workspaceId is required"),
+  researchItemId: z.string().trim().min(1, "researchItemId is required"),
+});
+
+export type GetResearchItemParamsInput = z.infer<
+  typeof getResearchItemParamsSchema
+>;

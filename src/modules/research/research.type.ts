@@ -64,3 +64,6 @@ export type ResearchItemListResult = {
   items: SafeResearchItemListItem[];
   pagination: PaginationMeta;
 };
+
+export type SafeResearchItemDetail = SafeResearchItemListItem;
+
