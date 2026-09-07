@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ResearchStatus } from "@prisma/client";
 import { extractEtsyListing } from "./research.helper.js";
 
 export const createResearchItemSchema = z
@@ -28,3 +29,44 @@ export const createResearchItemSchema = z
   .strict();
 
 export type CreateResearchItemInput = z.infer<typeof createResearchItemSchema>;
+
+export const getResearchItemsQuerySchema = z.object({
+  createdBy: z.string().trim().min(1, "createdBy cannot be empty").optional(),
+  status: z.nativeEnum(ResearchStatus, { message: "Invalid status" }).optional(),
+  date: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format, expected YYYY-MM-DD")
+    .refine((val) => {
+      const parts = val.split("-").map(Number);
+      if (parts.length !== 3 || parts.some(isNaN)) return false;
+      const [year, month, day] = parts;
+      const d = new Date(Date.UTC(year, month - 1, day));
+      return (
+        d.getUTCFullYear() === year &&
+        d.getUTCMonth() === month - 1 &&
+        d.getUTCDate() === day
+      );
+    }, "Invalid calendar date")
+    .optional(),
+  search: z
+    .string()
+    .trim()
+    .transform((val) => (val.length > 0 ? val : undefined))
+    .optional(),
+  page: z.coerce
+    .number()
+    .int("page must be an integer")
+    .positive("page must be a positive integer")
+    .default(1),
+  limit: z.coerce
+    .number()
+    .int("limit must be an integer")
+    .positive("limit must be a positive integer")
+    .max(100, "limit cannot exceed 100")
+    .default(20),
+});
+
+export type GetResearchItemsQueryInput = z.infer<
+  typeof getResearchItemsQuerySchema
+>;

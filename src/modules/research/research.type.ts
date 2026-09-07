@@ -38,3 +38,29 @@ export type DuplicateResearchItemData = {
   currentStatus: ResearchStatus;
   createdAt: Date;
 };
+
+export type SafeResearchItemListItem = {
+  id: string;
+  workspaceId: string;
+  etsyListingId: string;
+  originalUrl: string;
+  normalizedUrl: string;
+  title: string | null;
+  referenceImageUrl: string | null;
+  status: ResearchStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: DuplicateCreatorInfo;
+};
+
+export type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type ResearchItemListResult = {
+  items: SafeResearchItemListItem[];
+  pagination: PaginationMeta;
+};

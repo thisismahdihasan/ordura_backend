@@ -1,8 +1,11 @@
 import { Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
-import { createResearchItem } from "./research.service.js";
-import { createResearchItemSchema } from "./research.validation.js";
+import { createResearchItem, getResearchItems } from "./research.service.js";
+import {
+  createResearchItemSchema,
+  getResearchItemsQuerySchema,
+} from "./research.validation.js";
 
 export const create = async (
   req: Request,
@@ -28,5 +31,25 @@ export const create = async (
     data: {
       researchItem,
     },
+  });
+};
+
+export const list = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+
+  const validatedQuery = getResearchItemsQuerySchema.parse(req.query);
+
+  const result = await getResearchItems(workspaceId, validatedQuery);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research items retrieved successfully",
+    data: result,
   });
 };

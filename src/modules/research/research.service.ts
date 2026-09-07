@@ -3,10 +3,14 @@ import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "./research.helper.js";
 import { fetchEtsyMetadata } from "./research.metadata.js";
-import { CreateResearchItemInput } from "./research.validation.js";
+import {
+  CreateResearchItemInput,
+  GetResearchItemsQueryInput,
+} from "./research.validation.js";
 import {
   DuplicateResearchItemData,
   EtsyMetadata,
+  ResearchItemListResult,
   SafeResearchItem,
 } from "./research.type.js";
 
@@ -145,4 +149,89 @@ export const createResearchItem = async (
 
     throw error;
   }
+};
+
+export const safeResearchItemListSelect = {
+  id: true,
+  workspaceId: true,
+  etsyListingId: true,
+  originalUrl: true,
+  normalizedUrl: true,
+  title: true,
+  referenceImageUrl: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+} as const;
+
+export const getResearchItems = async (
+  workspaceId: string,
+  query: GetResearchItemsQueryInput
+): Promise<ResearchItemListResult> => {
+  const { page, limit, createdBy, status, date, search } = query;
+
+  const where: Prisma.ResearchItemWhereInput = {
+    workspaceId,
+  };
+
+  if (createdBy) {
+    where.createdById = createdBy;
+  }
+
+  if (status) {
+    where.status = status;
+  }
+
+  if (date) {
+    const [year, month, day] = date.split("-").map(Number);
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    const nextDay = new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0));
+    where.createdAt = {
+      gte: startOfDay,
+      lt: nextDay,
+    };
+  }
+
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: "insensitive" } },
+      { etsyListingId: { contains: search, mode: "insensitive" } },
+      { normalizedUrl: { contains: search, mode: "insensitive" } },
+      { originalUrl: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [items, total] = await prisma.$transaction([
+    prisma.researchItem.findMany({
+      where,
+      select: safeResearchItemListSelect,
+      orderBy: {
+        createdAt: "desc",
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.researchItem.count({ where }),
+  ]);
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+    },
+  };
 };
