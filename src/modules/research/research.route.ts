@@ -27,18 +27,6 @@ router.get(
 );
 
 router.get(
-  "/:researchItemId",
-  requireAuth,
-  requireWorkspaceRole(
-    WorkspaceRole.ADMIN,
-    WorkspaceRole.RESEARCHER,
-    WorkspaceRole.DESIGNER,
-    WorkspaceRole.LISTER
-  ),
-  catchAsync(getById)
-);
-
-router.get(
   "/:researchItemId/reference-image",
   requireAuth,
   requireWorkspaceRole(
@@ -48,6 +36,18 @@ router.get(
     WorkspaceRole.LISTER
   ),
   catchAsync(getReferenceImage)
+);
+
+router.get(
+  "/:researchItemId",
+  requireAuth,
+  requireWorkspaceRole(
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.RESEARCHER,
+    WorkspaceRole.DESIGNER,
+    WorkspaceRole.LISTER
+  ),
+  catchAsync(getById)
 );
 
 export const ResearchRoutes = router;

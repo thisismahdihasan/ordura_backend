@@ -215,9 +215,10 @@ export const getResearchItems = async (
     prisma.researchItem.findMany({
       where,
       select: safeResearchItemListSelect,
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
       skip,
       take: limit,
     }),

@@ -119,10 +119,6 @@ export const getReferenceImage = async (
     `${dispositionType}; filename="${filename}"`
   );
 
-  if (imageResult.contentLength) {
-    res.setHeader("Content-Length", imageResult.contentLength);
-  }
-
   const nodeReadable = Readable.fromWeb(
     imageResult.body as unknown as NodeReadableStream
   );

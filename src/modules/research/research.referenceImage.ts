@@ -10,20 +10,11 @@ export const MAX_CONTENT_LENGTH_BYTES = 15 * 1024 * 1024; // 15 MB
 export type SafeImageFetchResult = {
   body: ReadableStream<Uint8Array>;
   contentType: string;
-  contentLength?: string;
 };
 
 export type SafeImageFetchOptions = {
   customFetch?: typeof fetch;
   timeoutMs?: number;
-};
-
-let testFetchOverride: typeof fetch | undefined = undefined;
-
-export const setTestImageFetchHook = (
-  hook: { customFetch?: typeof fetch } | null
-): void => {
-  testFetchOverride = hook ? hook.customFetch : undefined;
 };
 
 const stripBrackets = (ip: string): string => {
@@ -192,7 +183,7 @@ export const fetchSafeImageStream = async (
 ): Promise<SafeImageFetchResult> => {
   let currentUrl = initialUrl;
   let redirectCount = 0;
-  const activeFetch = options?.customFetch ?? testFetchOverride ?? fetch;
+  const activeFetch = options?.customFetch ?? fetch;
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   while (redirectCount <= MAX_REDIRECTS) {
@@ -274,7 +265,6 @@ export const fetchSafeImageStream = async (
     return {
       body: response.body,
       contentType,
-      contentLength: contentLengthHeader || undefined,
     };
   }
 
