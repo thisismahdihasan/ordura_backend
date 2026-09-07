@@ -6,7 +6,7 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import { createWorkspace } from "./workspace.controller.js";
 import { createWorkspaceInvite } from "../workspaceInvite/workspaceInvite.controller.js";
 import { ResearchRoutes } from "../research/research.route.js";
-import { DesignerRoutes } from "../designer/designer.route.js";
+import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
 
 const router: Router = Router();
 
@@ -19,6 +19,7 @@ router.post(
 );
 router.use("/:workspaceId/research-items", ResearchRoutes);
 router.use("/:workspaceId/designer", DesignerRoutes);
+router.use("/:workspaceId/design", DesignRoutes);
 
 export const WorkspaceRoutes = router;
 export default router;

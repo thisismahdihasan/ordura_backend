@@ -49,3 +49,12 @@ export const getDesignerWorkQueueQuerySchema = z
 export type GetDesignerWorkQueueQueryInput = z.infer<
   typeof getDesignerWorkQueueQuerySchema
 >;
+
+export const startDesignWorkParamsSchema = z.object({
+  workspaceId: z.string().trim().min(1, "workspaceId is required"),
+  researchItemId: z.string().trim().min(1, "researchItemId is required"),
+});
+
+export type StartDesignWorkParamsInput = z.infer<
+  typeof startDesignWorkParamsSchema
+>;

@@ -35,3 +35,16 @@ export type DesignerWorkQueueResult = {
   items: DesignerWorkQueueItem[];
   pagination: PaginationMeta;
 };
+
+export type StartDesignWorkResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  assignment: {
+    id: string;
+    designerId: string;
+    startedAt: Date | null;
+    isCurrent: boolean;
+  };
+};

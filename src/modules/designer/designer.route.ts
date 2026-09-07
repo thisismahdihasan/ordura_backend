@@ -3,16 +3,29 @@ import { WorkspaceRole } from "@prisma/client";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
-import { getDesignerWorkQueue } from "./designer.controller.js";
+import {
+  getDesignerWorkQueue,
+  startDesignWork,
+} from "./designer.controller.js";
 
-const router: Router = Router({ mergeParams: true });
+const designerRouter: Router = Router({ mergeParams: true });
 
-router.get(
+designerRouter.get(
   "/my-work",
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.DESIGNER),
   catchAsync(getDesignerWorkQueue)
 );
 
-export const DesignerRoutes = router;
-export default router;
+const designRouter: Router = Router({ mergeParams: true });
+
+designRouter.post(
+  "/:researchItemId/start",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(startDesignWork)
+);
+
+export const DesignerRoutes = designerRouter;
+export const DesignRoutes = designRouter;
+export default designerRouter;
