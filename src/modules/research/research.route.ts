@@ -3,7 +3,7 @@ import { WorkspaceRole } from "@prisma/client";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
-import { create, getById, list } from "./research.controller.js";
+import { create, getById, getReferenceImage, list } from "./research.controller.js";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -36,6 +36,18 @@ router.get(
     WorkspaceRole.LISTER
   ),
   catchAsync(getById)
+);
+
+router.get(
+  "/:researchItemId/reference-image",
+  requireAuth,
+  requireWorkspaceRole(
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.RESEARCHER,
+    WorkspaceRole.DESIGNER,
+    WorkspaceRole.LISTER
+  ),
+  catchAsync(getReferenceImage)
 );
 
 export const ResearchRoutes = router;

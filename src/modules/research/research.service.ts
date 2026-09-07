@@ -256,3 +256,32 @@ export const getResearchItemById = async (
   return researchItem;
 };
 
+export const getReferenceImageData = async (
+  workspaceId: string,
+  researchItemId: string
+): Promise<{ id: string; referenceImageUrl: string }> => {
+  const item = await prisma.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      referenceImageUrl: true,
+    },
+  });
+
+  if (!item) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  if (!item.referenceImageUrl || item.referenceImageUrl.trim() === "") {
+    throw new ApiError(404, "Reference image not available");
+  }
+
+  return {
+    id: item.id,
+    referenceImageUrl: item.referenceImageUrl.trim(),
+  };
+};
+

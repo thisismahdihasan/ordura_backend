@@ -79,3 +79,14 @@ export const getResearchItemParamsSchema = z.object({
 export type GetResearchItemParamsInput = z.infer<
   typeof getResearchItemParamsSchema
 >;
+
+export const getReferenceImageQuerySchema = z.object({
+  download: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((val) => val === "true" || val === "1"),
+});
+
+export type GetReferenceImageQueryInput = z.infer<
+  typeof getReferenceImageQuerySchema
+>;
