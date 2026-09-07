@@ -1,6 +1,7 @@
 import { ApiError } from "../../shared/ApiError.js";
 import { ParsedEtsyListing } from "./research.type.js";
 
+// Parses and normalizes an Etsy URL, extracting the numeric listing ID and rejecting invalid domains.
 export const extractEtsyListing = (rawUrl: string): ParsedEtsyListing => {
   if (typeof rawUrl !== "string") {
     throw new ApiError(400, "etsyUrl must be a string");

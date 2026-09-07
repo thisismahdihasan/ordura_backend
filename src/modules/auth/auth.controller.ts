@@ -3,16 +3,17 @@ import { env } from "../../config/env.js";
 import { AuthenticatedRequest } from "../../middleware/requireAuth.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import { getAuthCookieOptions, getLogoutCookieOptions } from "./auth.helper.js";
-import { loginUser, registerUser } from "./auth.service.js";
+import * as authService from "./auth.service.js";
 import { loginSchema, registerSchema } from "./auth.validation.js";
 
-export const register = async (
+// Registers a new user account and sets the authentication session cookie.
+export const registerUser = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   const validatedInput = registerSchema.parse(req.body);
 
-  const result = await registerUser(validatedInput);
+  const result = await authService.registerUser(validatedInput);
 
   res.cookie(env.COOKIE_NAME, result.token, getAuthCookieOptions());
 
@@ -25,10 +26,11 @@ export const register = async (
   });
 };
 
-export const login = async (req: Request, res: Response): Promise<void> => {
+// Authenticates user credentials and issues a session cookie upon success.
+export const loginUser = async (req: Request, res: Response): Promise<void> => {
   const validatedInput = loginSchema.parse(req.body);
 
-  const result = await loginUser(validatedInput);
+  const result = await authService.loginUser(validatedInput);
 
   res.cookie(env.COOKIE_NAME, result.token, getAuthCookieOptions());
 
@@ -41,7 +43,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   });
 };
 
-export const logout = async (_req: Request, res: Response): Promise<void> => {
+// Clears the active authentication session cookie to log the user out.
+export const logoutUser = async (_req: Request, res: Response): Promise<void> => {
   res.clearCookie(env.COOKIE_NAME, getLogoutCookieOptions());
 
   ApiResponse.success(res, {
@@ -50,7 +53,8 @@ export const logout = async (_req: Request, res: Response): Promise<void> => {
   });
 };
 
-export const getMe = async (req: Request, res: Response): Promise<void> => {
+// Returns the profile of the currently authenticated user from request context.
+export const getCurrentUser = async (req: Request, res: Response): Promise<void> => {
   const authReq = req as AuthenticatedRequest;
 
   ApiResponse.success(res, {

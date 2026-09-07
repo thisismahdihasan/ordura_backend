@@ -43,6 +43,7 @@ const isPrivateOrLocalIpv4 = (ip: string): boolean => {
   return false;
 };
 
+// Checks whether an IP string belongs to a private, loopback, link-local, or broadcast range.
 export const isPrivateOrLocalIp = (rawIp: string): boolean => {
   const clean = stripBrackets(rawIp);
 
@@ -110,6 +111,7 @@ export const isPrivateOrLocalIp = (rawIp: string): boolean => {
   return false;
 };
 
+// Resolves hostnames via DNS and confirms destination addresses do not point to internal or private networks (SSRF defense).
 export const validateUrlSafety = async (rawUrl: string): Promise<URL> => {
   let parsed: URL;
   try {
@@ -159,6 +161,7 @@ export const validateUrlSafety = async (rawUrl: string): Promise<URL> => {
   return parsed;
 };
 
+// Creates a stream transform that enforces a strict maximum byte limit to avoid memory exhaustion.
 export const createByteLimitTransform = (
   maxBytes: number = MAX_CONTENT_LENGTH_BYTES
 ): Transform => {
@@ -177,6 +180,7 @@ export const createByteLimitTransform = (
   });
 };
 
+// Safely requests an image with manual redirect checks, DNS validation, and streamed byte capping.
 export const fetchSafeImageStream = async (
   initialUrl: string,
   options?: SafeImageFetchOptions

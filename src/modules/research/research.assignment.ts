@@ -13,6 +13,7 @@ export type DesignerWorkload = {
   activeWorkload: number;
 };
 
+// Identifies the workspace designer with the lowest active workload, using join date and ID as deterministic tie-breakers.
 export const findLeastWorkloadDesigner = async (
   tx: Prisma.TransactionClient,
   workspaceId: string

@@ -7,13 +7,7 @@ import {
   createByteLimitTransform,
   fetchSafeImageStream,
 } from "./research.referenceImage.js";
-import {
-  createResearchItem,
-  getReferenceImageData,
-  getResearchItemById,
-  getResearchItems,
-  reassignResearchDesigner,
-} from "./research.service.js";
+import * as researchService from "./research.service.js";
 import {
   createResearchItemSchema,
   getReferenceImageQuerySchema,
@@ -22,7 +16,8 @@ import {
   reassignDesignerBodySchema,
 } from "./research.validation.js";
 
-export const create = async (
+// Creates a research item from an Etsy listing URL and automatically assigns an eligible designer.
+export const createResearchItem = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -34,7 +29,7 @@ export const create = async (
 
   const validatedInput = createResearchItemSchema.parse(req.body);
 
-  const researchItem = await createResearchItem(
+  const researchItem = await researchService.createResearchItem(
     workspaceId,
     authReq.user.id,
     validatedInput
@@ -49,7 +44,8 @@ export const create = async (
   });
 };
 
-export const list = async (
+// Retrieves a paginated list of research items in the workspace with optional filters.
+export const getResearchItems = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -60,7 +56,7 @@ export const list = async (
 
   const validatedQuery = getResearchItemsQuerySchema.parse(req.query);
 
-  const result = await getResearchItems(workspaceId, validatedQuery);
+  const result = await researchService.getResearchItems(workspaceId, validatedQuery);
 
   ApiResponse.success(res, {
     statusCode: 200,
@@ -69,7 +65,8 @@ export const list = async (
   });
 };
 
-export const getById = async (
+// Fetches a single research item by ID within the authenticated workspace.
+export const getResearchItemById = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -77,7 +74,7 @@ export const getById = async (
     req.params
   );
 
-  const researchItem = await getResearchItemById(workspaceId, researchItemId);
+  const researchItem = await researchService.getResearchItemById(workspaceId, researchItemId);
 
   ApiResponse.success(res, {
     statusCode: 200,
@@ -88,7 +85,8 @@ export const getById = async (
   });
 };
 
-export const getReferenceImage = async (
+// Proxies the reference image stream with SSRF protection, size caps, and preview/download disposition.
+export const getResearchReferenceImage = async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -98,7 +96,7 @@ export const getReferenceImage = async (
   );
   const { download } = getReferenceImageQuerySchema.parse(req.query);
 
-  const { referenceImageUrl } = await getReferenceImageData(
+  const { referenceImageUrl } = await researchService.getReferenceImageData(
     workspaceId,
     researchItemId
   );
@@ -137,7 +135,8 @@ export const getReferenceImage = async (
   });
 };
 
-export const reassignDesigner = async (
+// Manually reassigns an existing research item to a different workspace designer.
+export const reassignResearchDesigner = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -146,7 +145,7 @@ export const reassignDesigner = async (
   );
   const validatedBody = reassignDesignerBodySchema.parse(req.body);
 
-  const result = await reassignResearchDesigner(
+  const result = await researchService.reassignResearchDesigner(
     workspaceId,
     researchItemId,
     validatedBody.designerId
@@ -158,4 +157,5 @@ export const reassignDesigner = async (
     data: result,
   });
 };
+
 

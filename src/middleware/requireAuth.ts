@@ -10,6 +10,7 @@ export type AuthenticatedRequest = Request & {
   user: SafeUser;
 };
 
+// Enforces authentication cookie presence, validates JWT integrity, and attaches user profile to request.
 export const requireAuth = catchAsync(
   async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const token = req.cookies?.[env.COOKIE_NAME];

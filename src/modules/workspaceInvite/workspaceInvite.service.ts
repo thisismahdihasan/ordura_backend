@@ -29,6 +29,7 @@ const safeWorkspaceMemberSelect = {
   createdAt: true,
 } as const;
 
+// Generates a cryptographically secure workspace invitation and dispatches the invite email.
 export const createWorkspaceInvite = async (
   callerUserId: string,
   input: CreateWorkspaceInviteInput,
@@ -193,6 +194,7 @@ export const createWorkspaceInvite = async (
   };
 };
 
+// Validates the invitation token, verifies recipient email match, and grants workspace membership.
 export const acceptWorkspaceInvite = async (
   userId: string,
   userEmail: string,

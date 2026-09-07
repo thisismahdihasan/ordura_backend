@@ -1,17 +1,21 @@
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/requireAuth.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
-import { createWorkspace } from "./workspace.service.js";
+import * as workspaceService from "./workspace.service.js";
 import { createWorkspaceSchema } from "./workspace.validation.js";
 
-export const create = async (
+// Creates a new workspace and automatically assigns the creator as an ADMIN member.
+export const createWorkspace = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   const authReq = req as AuthenticatedRequest;
   const validatedInput = createWorkspaceSchema.parse(req.body);
 
-  const result = await createWorkspace(authReq.user.id, validatedInput);
+  const result = await workspaceService.createWorkspace(
+    authReq.user.id,
+    validatedInput
+  );
 
   ApiResponse.success(res, {
     statusCode: 201,
@@ -19,3 +23,4 @@ export const create = async (
     data: result,
   });
 };
+

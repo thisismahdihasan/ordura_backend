@@ -13,6 +13,7 @@ const decodeHtmlEntities = (rawText: string): string => {
     .replace(/&#x2F;/g, "/");
 };
 
+// Extracts og:title, og:image, or title tag fallbacks from public HTML markup.
 export const parseHtmlMetadata = (html: string): EtsyMetadata => {
   let title: string | null = null;
   let referenceImageUrl: string | null = null;
@@ -79,6 +80,7 @@ export const parseHtmlMetadata = (html: string): EtsyMetadata => {
   };
 };
 
+// Performs a best-effort remote fetch for Etsy listing page metadata with a bounded timeout.
 export const fetchEtsyMetadata = async (
   url: string,
   customFetch?: typeof fetch

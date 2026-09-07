@@ -20,6 +20,7 @@ const safeWorkspaceMemberSelect = {
   createdAt: true,
 } as const;
 
+// Creates a new workspace and sets up the owner as an initial ADMIN member within a transaction.
 export const createWorkspace = async (
   userId: string,
   input: CreateWorkspaceInput

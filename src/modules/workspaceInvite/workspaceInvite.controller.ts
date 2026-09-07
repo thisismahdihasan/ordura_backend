@@ -1,16 +1,14 @@
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/requireAuth.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
-import {
-  acceptWorkspaceInvite,
-  createWorkspaceInvite,
-} from "./workspaceInvite.service.js";
+import * as workspaceInviteService from "./workspaceInvite.service.js";
 import {
   acceptWorkspaceInviteParamsSchema,
   createWorkspaceInviteSchema,
 } from "./workspaceInvite.validation.js";
 
-export const createInvite = async (
+// Issues an email invitation with designated workspace roles to a prospective member.
+export const createWorkspaceInvite = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -20,7 +18,7 @@ export const createInvite = async (
   const targetWorkspaceId =
     typeof rawWorkspaceId === "string" ? rawWorkspaceId : undefined;
 
-  const result = await createWorkspaceInvite(
+  const result = await workspaceInviteService.createWorkspaceInvite(
     authReq.user.id,
     validatedInput,
     targetWorkspaceId
@@ -33,14 +31,15 @@ export const createInvite = async (
   });
 };
 
-export const acceptInvite = async (
+// Validates the invite token and adds the accepting user as a workspace member with the invited roles.
+export const acceptWorkspaceInvite = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   const authReq = req as AuthenticatedRequest;
   const { token } = acceptWorkspaceInviteParamsSchema.parse(req.params);
 
-  const result = await acceptWorkspaceInvite(
+  const result = await workspaceInviteService.acceptWorkspaceInvite(
     authReq.user.id,
     authReq.user.email,
     token
@@ -52,3 +51,4 @@ export const acceptInvite = async (
     data: result,
   });
 };
+

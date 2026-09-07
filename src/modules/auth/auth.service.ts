@@ -12,6 +12,7 @@ const safeUserSelect = {
   createdAt: true,
 } as const;
 
+// Validates email uniqueness, securely hashes the password, and creates a new user record.
 export const registerUser = async (
   input: RegisterInput
 ): Promise<AuthResult> => {
@@ -53,6 +54,7 @@ export const registerUser = async (
   }
 };
 
+// Verifies user credentials against the stored password hash and produces an authentication token.
 export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
   const user = await prisma.user.findUnique({
     where: { email: input.email },
@@ -93,9 +95,11 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
   };
 };
 
+// Retrieves a user record by ID, omitting sensitive credentials like passwordHash.
 export const getUserById = async (userId: string): Promise<SafeUser | null> => {
   return prisma.user.findUnique({
     where: { id: userId },
     select: safeUserSelect,
   });
 };
+

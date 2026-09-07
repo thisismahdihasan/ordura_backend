@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { checkDatabaseHealth } from "./health.service.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 
+// Responds with system health status and database connectivity.
 export const getHealth = async (
   _req: Request,
   res: Response

@@ -12,6 +12,7 @@ type ErrorResponsePayload = {
   error?: unknown;
 };
 
+// Central error handling middleware that formats ApiError, Zod validation, and Prisma errors into consistent responses.
 export const globalErrorHandler: ErrorRequestHandler = (
   err: unknown,
   _req: Request,

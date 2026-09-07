@@ -48,6 +48,7 @@ export type CreateResearchItemOptions = {
   metadataFetcher?: (url: string) => Promise<EtsyMetadata>;
 };
 
+// Creates a new research item, parses metadata, and atomically auto-assigns the least-loaded designer.
 export const createResearchItem = async (
   workspaceId: string,
   userId: string,
@@ -198,6 +199,7 @@ export const safeResearchItemListSelect = {
   },
 } as const;
 
+// Returns a paginated list of workspace research items matching creator, status, date, or search filters.
 export const getResearchItems = async (
   workspaceId: string,
   query: GetResearchItemsQueryInput
@@ -264,6 +266,7 @@ export const getResearchItems = async (
   };
 };
 
+// Fetches details for a single research item scoped strictly to the specified workspace.
 export const getResearchItemById = async (
   workspaceId: string,
   researchItemId: string
@@ -283,6 +286,7 @@ export const getResearchItemById = async (
   return researchItem;
 };
 
+// Retrieves the stored reference image URL for an item after verifying workspace access.
 export const getReferenceImageData = async (
   workspaceId: string,
   researchItemId: string
@@ -321,6 +325,7 @@ export const REASSIGNABLE_STATUSES: ResearchStatus[] = [
   ResearchStatus.ISSUE_REPORTED,
 ];
 
+// Atomically reassigns an in-flight research item to another workspace designer, preserving assignment history.
 export const reassignResearchDesigner = async (
   workspaceId: string,
   researchItemId: string,

@@ -32,14 +32,17 @@ let activeMailSender: MailSender = async (
   });
 };
 
+// Dispatches an email via the configured SMTP transport or mock test sender.
 export const sendMail = async (options: SendMailOptions): Promise<void> => {
   await activeMailSender(options);
 };
 
+// Overrides the active email sender with a custom mock function during tests.
 export const setMailSenderForTesting = (customSender: MailSender): void => {
   activeMailSender = customSender;
 };
 
+// Restores the default SMTP nodemailer sender after test overrides.
 export const resetMailSender = (): void => {
   activeMailSender = async (options: SendMailOptions): Promise<void> => {
     await transporter.sendMail({
@@ -51,3 +54,4 @@ export const resetMailSender = (): void => {
     });
   };
 };
+

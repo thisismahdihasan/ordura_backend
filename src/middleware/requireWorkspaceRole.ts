@@ -15,6 +15,7 @@ export type WorkspaceAuthorizedRequest = AuthenticatedRequest & {
   workspaceMembership: WorkspaceMembershipContext;
 };
 
+// Verifies the user has active membership in the target workspace and possesses at least one of the allowed roles.
 export const requireWorkspaceRole = (
   ...allowedRoles: WorkspaceRole[]
 ) => {
