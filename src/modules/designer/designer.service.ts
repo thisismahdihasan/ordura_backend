@@ -147,38 +147,41 @@ export const startDesignWork = async (
       throw new ApiError(403, "You are not assigned to this research item");
     }
 
-    // 4. Double-start protection: startedAt already populated
+    // 4. Double-start protection: startedAt already populated on this assignment
     if (currentAssignment.startedAt !== null) {
       throw new ApiError(409, "Design work has already been started");
     }
 
-    // 5. Status validation: must be ASSIGNED
-    if (researchItem.status !== ResearchStatus.ASSIGNED) {
-      if (researchItem.status === ResearchStatus.DESIGN_IN_PROGRESS) {
-        throw new ApiError(409, "Design work has already been started");
-      }
+    // 5. Status validation: allowed for ASSIGNED (first start) or DESIGN_IN_PROGRESS (reassigned start)
+    if (
+      researchItem.status !== ResearchStatus.ASSIGNED &&
+      researchItem.status !== ResearchStatus.DESIGN_IN_PROGRESS
+    ) {
       throw new ApiError(
         409,
         `Cannot start design work for an item with status ${researchItem.status}`
       );
     }
 
-    // 6. Conditional atomic status update on ResearchItem
     const now = new Date();
-    const updatedItemResult = await tx.researchItem.updateMany({
-      where: {
-        id: researchItemId,
-        workspaceId,
-        status: ResearchStatus.ASSIGNED,
-      },
-      data: {
-        status: ResearchStatus.DESIGN_IN_PROGRESS,
-        updatedAt: now,
-      },
-    });
 
-    if (updatedItemResult.count === 0) {
-      throw new ApiError(409, "Design work has already been started");
+    // 6. If status is ASSIGNED, conditionally transition to DESIGN_IN_PROGRESS
+    if (researchItem.status === ResearchStatus.ASSIGNED) {
+      const updatedItemResult = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.ASSIGNED,
+        },
+        data: {
+          status: ResearchStatus.DESIGN_IN_PROGRESS,
+          updatedAt: now,
+        },
+      });
+
+      if (updatedItemResult.count === 0) {
+        throw new ApiError(409, "Design work has already been started");
+      }
     }
 
     // 7. Conditional atomic update on DesignAssignment
