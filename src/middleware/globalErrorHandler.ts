@@ -7,6 +7,7 @@ import { env } from "../config/env.js";
 type ErrorResponsePayload = {
   success: false;
   message: string;
+  data?: Record<string, unknown>;
   stack?: string;
   error?: unknown;
 };
@@ -21,6 +22,7 @@ export const globalErrorHandler: ErrorRequestHandler = (
   let message = "Something went wrong";
   let isOperational = false;
   let stack: string | undefined = undefined;
+  let data: Record<string, unknown> | undefined = undefined;
 
   if (err instanceof ZodError) {
     statusCode = 400;
@@ -38,6 +40,7 @@ export const globalErrorHandler: ErrorRequestHandler = (
     message = err.message;
     isOperational = err.isOperational;
     stack = err.stack;
+    data = err.data;
   } else if (err instanceof Error) {
     message = err.message;
     stack = err.stack;
@@ -53,6 +56,10 @@ export const globalErrorHandler: ErrorRequestHandler = (
     success: false,
     message,
   };
+
+  if (isOperational && data !== undefined) {
+    responsePayload.data = data;
+  }
 
   if (env.NODE_ENV === "development") {
     responsePayload.stack = stack;
