@@ -17,3 +17,20 @@ export type ReviewAnnotationItem = {
 export type CreateReviewAnnotationResult = {
   annotation: ReviewAnnotationItem;
 };
+
+export type AnnotationReplyCreatedBy = {
+  id: string;
+  name: string | null;
+};
+
+export type AnnotationReplyItem = {
+  id: string;
+  annotationId: string;
+  message: string;
+  createdAt: Date;
+  createdBy: AnnotationReplyCreatedBy;
+};
+
+export type CreateAnnotationReplyResult = {
+  reply: AnnotationReplyItem;
+};

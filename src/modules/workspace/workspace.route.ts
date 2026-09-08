@@ -7,7 +7,7 @@ import { createWorkspace } from "./workspace.controller.js";
 import { createWorkspaceInvite } from "../workspaceInvite/workspaceInvite.controller.js";
 import { ResearchRoutes } from "../research/research.route.js";
 import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
-import { ReviewRoutes } from "../review/review.route.js";
+import { ReviewRoutes, AnnotationRoutes } from "../review/review.route.js";
 
 const router: Router = Router();
 
@@ -22,6 +22,7 @@ router.use("/:workspaceId/research-items", ResearchRoutes);
 router.use("/:workspaceId/designer", DesignerRoutes);
 router.use("/:workspaceId/design", DesignRoutes);
 router.use("/:workspaceId/reviews", ReviewRoutes);
+router.use("/:workspaceId/annotations", AnnotationRoutes);
 
 export const WorkspaceRoutes = router;
 export default router;

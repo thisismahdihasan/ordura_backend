@@ -40,3 +40,30 @@ export const createReviewAnnotationBodySchema = z
 export type CreateReviewAnnotationBodyInput = z.infer<
   typeof createReviewAnnotationBodySchema
 >;
+
+export const createAnnotationReplyParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    annotationId: z.string().trim().min(1, "annotationId is required"),
+  })
+  .strict();
+
+export type CreateAnnotationReplyParamsInput = z.infer<
+  typeof createAnnotationReplyParamsSchema
+>;
+
+export const createAnnotationReplyBodySchema = z
+  .object({
+    message: z
+      .string({
+        message: "message must be a string",
+      })
+      .trim()
+      .min(1, "message cannot be empty")
+      .max(2000, "message cannot exceed 2000 characters"),
+  })
+  .strict();
+
+export type CreateAnnotationReplyBodyInput = z.infer<
+  typeof createAnnotationReplyBodySchema
+>;

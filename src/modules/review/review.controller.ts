@@ -3,6 +3,8 @@ import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRol
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as reviewService from "./review.service.js";
 import {
+  createAnnotationReplyBodySchema,
+  createAnnotationReplyParamsSchema,
   createReviewAnnotationBodySchema,
   createReviewAnnotationParamsSchema,
 } from "./review.validation.js";
@@ -28,6 +30,30 @@ export const createReviewAnnotation = async (
   ApiResponse.success(res, {
     statusCode: 201,
     message: "Review annotation created successfully",
+    data: result,
+  });
+};
+
+// Handles HTTP request for creating a threaded reply on an existing review annotation.
+export const createAnnotationReply = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, annotationId } =
+    createAnnotationReplyParamsSchema.parse(req.params);
+  const validatedBody = createAnnotationReplyBodySchema.parse(req.body);
+
+  const result = await reviewService.createAnnotationReply(
+    workspaceId,
+    annotationId,
+    authReq.user.id,
+    validatedBody
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 201,
+    message: "Annotation reply created successfully",
     data: result,
   });
 };
