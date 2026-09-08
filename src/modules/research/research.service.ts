@@ -429,9 +429,15 @@ export const reassignResearchDesigner = async (
 
     // 9. Status transition logic
     let finalStatus = lockedItem.status;
-    if (lockedItem.status === ResearchStatus.RESEARCHED) {
+    if (
+      lockedItem.status === ResearchStatus.RESEARCHED ||
+      lockedItem.status === ResearchStatus.ISSUE_REPORTED
+    ) {
       await tx.researchItem.update({
-        where: { id: researchItemId },
+        where: {
+          id: researchItemId,
+          workspaceId,
+        },
         data: { status: ResearchStatus.ASSIGNED },
       });
       finalStatus = ResearchStatus.ASSIGNED;
@@ -444,6 +450,10 @@ export const reassignResearchDesigner = async (
       },
       assignment: newAssignment,
     };
+  },
+  {
+    maxWait: 10000,
+    timeout: 15000,
   });
 };
 
