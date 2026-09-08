@@ -25,6 +25,63 @@ const envSchema = z.object({
   SMTP_PASS: z.string().min(1, "SMTP_PASS is required"),
   SMTP_FROM: z.string().min(1, "SMTP_FROM is required"),
   FRONTEND_INVITE_URL: z.string().url("FRONTEND_INVITE_URL must be a valid URL"),
+  CLOUDINARY_CLOUD_NAME: z.string().trim().optional(),
+  CLOUDINARY_API_KEY: z.string().trim().optional(),
+  CLOUDINARY_API_SECRET: z.string().trim().optional(),
+})
+.superRefine((data, ctx) => {
+  const hasCloudName = Boolean(data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_CLOUD_NAME.trim().length > 0);
+  const hasApiKey = Boolean(data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_KEY.trim().length > 0);
+  const hasApiSecret = Boolean(data.CLOUDINARY_API_SECRET && data.CLOUDINARY_API_SECRET.trim().length > 0);
+
+  const anyProvided = hasCloudName || hasApiKey || hasApiSecret;
+  const allProvided = hasCloudName && hasApiKey && hasApiSecret;
+
+  if (data.NODE_ENV === "production") {
+    if (!hasCloudName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CLOUDINARY_CLOUD_NAME is required in production",
+        path: ["CLOUDINARY_CLOUD_NAME"],
+      });
+    }
+    if (!hasApiKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CLOUDINARY_API_KEY is required in production",
+        path: ["CLOUDINARY_API_KEY"],
+      });
+    }
+    if (!hasApiSecret) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CLOUDINARY_API_SECRET is required in production",
+        path: ["CLOUDINARY_API_SECRET"],
+      });
+    }
+  } else if (anyProvided && !allProvided) {
+    if (!hasCloudName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CLOUDINARY_CLOUD_NAME is required when Cloudinary configuration is provided",
+        path: ["CLOUDINARY_CLOUD_NAME"],
+      });
+    }
+    if (!hasApiKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CLOUDINARY_API_KEY is required when Cloudinary configuration is provided",
+        path: ["CLOUDINARY_API_KEY"],
+      });
+    }
+    if (!hasApiSecret) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CLOUDINARY_API_SECRET is required when Cloudinary configuration is provided",
+        path: ["CLOUDINARY_API_SECRET"],
+      });
+    }
+  }
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
