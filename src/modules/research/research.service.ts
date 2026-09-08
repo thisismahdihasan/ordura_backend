@@ -135,6 +135,10 @@ export const createResearchItem = async (
       }
 
       return item;
+    },
+    {
+      maxWait: 10000,
+      timeout: 15000,
     });
 
     return createdItem;

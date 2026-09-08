@@ -217,6 +217,10 @@ export const startDesignWork = async (
         isCurrent: true,
       },
     };
+  },
+  {
+    maxWait: 10000,
+    timeout: 15000,
   });
 };
 
