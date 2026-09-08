@@ -99,3 +99,29 @@ export type ReportDesignIssueBodyInput = z.infer<
   typeof reportDesignIssueBodySchema
 >;
 
+export const submitDesignReviewParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type SubmitDesignReviewParamsInput = z.infer<
+  typeof submitDesignReviewParamsSchema
+>;
+
+export const submitDesignReviewBodySchema = z
+  .object({
+    note: z
+      .string()
+      .trim()
+      .max(2000, "note cannot exceed 2000 characters")
+      .transform((val) => (val.length > 0 ? val : undefined))
+      .optional(),
+  })
+  .strict();
+
+export type SubmitDesignReviewBodyInput = z.infer<
+  typeof submitDesignReviewBodySchema
+>;
+

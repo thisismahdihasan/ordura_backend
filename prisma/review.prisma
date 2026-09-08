@@ -5,6 +5,7 @@ model ReviewSubmission {
   roundNumber    Int
   imageUrl       String
   imagePublicId  String
+  note           String?
   submittedAt    DateTime @default(now())
 
   researchItem ResearchItem       @relation(fields: [researchItemId], references: [id], onDelete: Cascade)

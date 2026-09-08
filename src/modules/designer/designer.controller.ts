@@ -1,12 +1,19 @@
 import { Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
+import { ApiError } from "../../shared/ApiError.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as designerService from "./designer.service.js";
+import {
+  ReviewImageDestroyer,
+  ReviewImageUploader,
+} from "./designer.review-storage.js";
 import {
   getDesignerWorkQueueQuerySchema,
   reportDesignIssueBodySchema,
   reportDesignIssueParamsSchema,
   startDesignWorkParamsSchema,
+  submitDesignReviewBodySchema,
+  submitDesignReviewParamsSchema,
 } from "./designer.validation.js";
 
 // Handles HTTP request for fetching the authenticated designer's active work queue.
@@ -82,4 +89,47 @@ export const reportDesignIssue = async (
     data: result,
   });
 };
+
+// Handles HTTP request for submitting an assigned design for review.
+export const submitDesignReview = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = submitDesignReviewParamsSchema.parse(
+    req.params
+  );
+  const validatedBody = submitDesignReviewBodySchema.parse(req.body);
+
+  if (!req.file || !req.file.buffer) {
+    throw new ApiError(400, "Image file is required");
+  }
+
+  const uploader = req.app?.get("reviewImageUploader") as
+    | ReviewImageUploader
+    | undefined;
+  const destroyer = req.app?.get("reviewImageDestroyer") as
+    | ReviewImageDestroyer
+    | undefined;
+
+  const result = await designerService.submitAssignedDesignReview(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    {
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+    },
+    validatedBody.note,
+    uploader,
+    destroyer
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Design submitted for review successfully",
+    data: result,
+  });
+};
+
 

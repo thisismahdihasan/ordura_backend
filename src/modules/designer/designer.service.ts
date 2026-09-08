@@ -10,9 +10,18 @@ import {
   DesignerWorkQueueItem,
   DesignerWorkQueueResult,
   NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED,
+  NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED,
   ReportDesignIssueResult,
   StartDesignWorkResult,
+  SubmitDesignReviewResult,
 } from "./designer.type.js";
+import {
+  ReviewImageDestroyer,
+  ReviewImageUploadInput,
+  ReviewImageUploader,
+  deleteTemporaryReviewImage,
+  uploadTemporaryReviewImage,
+} from "./designer.review-storage.js";
 
 export const safeDesignerWorkQueueSelect = {
   id: true,
@@ -384,5 +393,209 @@ export const reportAssignedDesignIssue = async (
     timeout: 15000,
   });
 };
+
+// Atomically transitions an in-progress research item to DESIGN_REVIEW, records a ReviewSubmission, and notifies workspace admins.
+export const submitAssignedDesignReview = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string,
+  imageInput: ReviewImageUploadInput,
+  note?: string,
+  uploader?: ReviewImageUploader,
+  destroyer?: ReviewImageDestroyer
+): Promise<SubmitDesignReviewResult> => {
+  // 1. Pre-upload state check (optimization before external upload)
+  const precheckItem = await prisma.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      status: true,
+    },
+  });
+
+  if (!precheckItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  if (precheckItem.status !== ResearchStatus.DESIGN_IN_PROGRESS) {
+    throw new ApiError(
+      409,
+      `Cannot submit review for research item with status ${precheckItem.status}`
+    );
+  }
+
+  const precheckAssignment = await prisma.designAssignment.findFirst({
+    where: {
+      researchItemId,
+      isCurrent: true,
+    },
+    select: {
+      id: true,
+      designerId: true,
+      startedAt: true,
+    },
+  });
+
+  if (!precheckAssignment) {
+    throw new ApiError(409, "No active assignment found for this research item");
+  }
+
+  if (precheckAssignment.designerId !== designerId) {
+    throw new ApiError(403, "You are not assigned to this research item");
+  }
+
+  if (precheckAssignment.startedAt === null) {
+    throw new ApiError(409, "Design work has not been started");
+  }
+
+  // 2. Upload review screenshot to Cloudinary (MUST occur OUTSIDE DB transaction)
+  const uploadedImage = await uploadTemporaryReviewImage(imageInput, uploader);
+
+  // 3. Authoritative DB transaction with rollback cleanup
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        // Step A: Conditional status transition gate
+        const updatedItemResult = await tx.researchItem.updateMany({
+          where: {
+            id: researchItemId,
+            workspaceId,
+            status: ResearchStatus.DESIGN_IN_PROGRESS,
+          },
+          data: {
+            status: ResearchStatus.DESIGN_REVIEW,
+            updatedAt: new Date(),
+          },
+        });
+
+        if (updatedItemResult.count !== 1) {
+          throw new ApiError(
+            409,
+            "Research item is not in DESIGN_IN_PROGRESS status or has already been submitted for review"
+          );
+        }
+
+        // Step B: Post-gate assignment re-check to protect reassign race
+        const stillCurrentAssignment = await tx.designAssignment.findFirst({
+          where: {
+            researchItemId,
+            designerId,
+            isCurrent: true,
+          },
+          select: {
+            id: true,
+            startedAt: true,
+          },
+        });
+
+        if (!stillCurrentAssignment) {
+          throw new ApiError(403, "You are not assigned to this research item");
+        }
+
+        if (stillCurrentAssignment.startedAt === null) {
+          throw new ApiError(409, "Design work has not been started");
+        }
+
+        // Step C: Calculate server-side round number (latest existing round + 1)
+        const latestSubmission = await tx.reviewSubmission.findFirst({
+          where: { researchItemId },
+          orderBy: { roundNumber: "desc" },
+          select: { roundNumber: true },
+        });
+
+        const roundNumber = (latestSubmission?.roundNumber ?? 0) + 1;
+
+        // Step D: Create ReviewSubmission record
+        const normalizedNote = note?.trim() || null;
+        const reviewSubmission = await tx.reviewSubmission.create({
+          data: {
+            researchItemId,
+            designerId,
+            roundNumber,
+            imageUrl: uploadedImage.secureUrl,
+            imagePublicId: uploadedImage.publicId,
+            note: normalizedNote,
+          },
+          select: {
+            id: true,
+            roundNumber: true,
+            imageUrl: true,
+            note: true,
+            submittedAt: true,
+          },
+        });
+
+        // Step E: Query all ADMIN members of the same workspace
+        const adminMembers = await tx.workspaceMember.findMany({
+          where: {
+            workspaceId,
+            roles: {
+              has: WorkspaceRole.ADMIN,
+            },
+          },
+          select: {
+            userId: true,
+          },
+        });
+
+        if (adminMembers.length === 0) {
+          throw new ApiError(
+            500,
+            "No workspace administrator found to receive review notification"
+          );
+        }
+
+        // Step F: Fetch designer display name minimally for human notification message
+        const designerUser = await tx.user.findUnique({
+          where: { id: designerId },
+          select: { name: true },
+        });
+
+        const designerDisplayName = designerUser?.name?.trim() || "A designer";
+
+        // Step G: Create in-app notifications for all workspace admins
+        await tx.notification.createMany({
+          data: adminMembers.map((admin) => ({
+            userId: admin.userId,
+            type: NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED,
+            title: "Design Submitted for Review",
+            message: `${designerDisplayName} submitted review round ${roundNumber}.`,
+            researchItemId,
+          })),
+        });
+
+        return {
+          researchItem: {
+            id: researchItemId,
+            status: ResearchStatus.DESIGN_REVIEW,
+          },
+          reviewSubmission: {
+            id: reviewSubmission.id,
+            roundNumber: reviewSubmission.roundNumber,
+            imageUrl: reviewSubmission.imageUrl,
+            note: reviewSubmission.note,
+            submittedAt: reviewSubmission.submittedAt,
+          },
+        };
+      },
+      {
+        maxWait: 10000,
+        timeout: 15000,
+      }
+    );
+  } catch (error) {
+    // Attempt cleanup of uploaded Cloudinary image on any DB failure
+    try {
+      await deleteTemporaryReviewImage(uploadedImage.publicId, destroyer);
+    } catch {
+      // Do not mask original error if cleanup fails
+    }
+    throw error;
+  }
+};
+
 
 

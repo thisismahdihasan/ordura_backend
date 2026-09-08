@@ -65,4 +65,21 @@ export type ReportDesignIssueResult = {
 export const NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED =
   "DESIGN_ISSUE_REPORTED" as const;
 
+export type SubmitDesignReviewResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  reviewSubmission: {
+    id: string;
+    roundNumber: number;
+    imageUrl: string;
+    note: string | null;
+    submittedAt: Date;
+  };
+};
+
+export const NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED =
+  "DESIGN_REVIEW_SUBMITTED" as const;
+
 

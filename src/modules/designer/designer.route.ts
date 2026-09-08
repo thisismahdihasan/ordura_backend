@@ -7,7 +7,9 @@ import {
   getDesignerWorkQueue,
   reportDesignIssue,
   startDesignWork,
+  submitDesignReview,
 } from "./designer.controller.js";
+import { reviewImageUploadMiddleware } from "./designer.upload.js";
 
 const designerRouter: Router = Router({ mergeParams: true });
 
@@ -32,6 +34,14 @@ designRouter.post(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.DESIGNER),
   catchAsync(reportDesignIssue)
+);
+
+designRouter.post(
+  "/:researchItemId/review",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  reviewImageUploadMiddleware,
+  catchAsync(submitDesignReview)
 );
 
 export const DesignerRoutes = designerRouter;
