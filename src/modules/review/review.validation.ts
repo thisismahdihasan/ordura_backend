@@ -67,3 +67,23 @@ export const createAnnotationReplyBodySchema = z
 export type CreateAnnotationReplyBodyInput = z.infer<
   typeof createAnnotationReplyBodySchema
 >;
+
+export const requestCorrectionParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    reviewId: z.string().trim().min(1, "reviewId is required"),
+  })
+  .strict();
+
+export type RequestCorrectionParamsInput = z.infer<
+  typeof requestCorrectionParamsSchema
+>;
+
+export const requestCorrectionBodySchema = z
+  .object({})
+  .strict()
+  .optional();
+
+export type RequestCorrectionBodyInput = z.infer<
+  typeof requestCorrectionBodySchema
+>;

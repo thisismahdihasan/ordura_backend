@@ -6,6 +6,7 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import {
   createAnnotationReply,
   createReviewAnnotation,
+  requestReviewCorrection,
 } from "./review.controller.js";
 
 const reviewRouter: Router = Router({ mergeParams: true });
@@ -15,6 +16,13 @@ reviewRouter.post(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(createReviewAnnotation)
+);
+
+reviewRouter.post(
+  "/:reviewId/request-correction",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(requestReviewCorrection)
 );
 
 const annotationRouter: Router = Router({ mergeParams: true });

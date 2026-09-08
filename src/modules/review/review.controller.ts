@@ -7,6 +7,8 @@ import {
   createAnnotationReplyParamsSchema,
   createReviewAnnotationBodySchema,
   createReviewAnnotationParamsSchema,
+  requestCorrectionBodySchema,
+  requestCorrectionParamsSchema,
 } from "./review.validation.js";
 
 // Handles HTTP request for creating an annotation on the current review screenshot.
@@ -54,6 +56,28 @@ export const createAnnotationReply = async (
   ApiResponse.success(res, {
     statusCode: 201,
     message: "Annotation reply created successfully",
+    data: result,
+  });
+};
+
+// Handles HTTP request for requesting design corrections on the current review round.
+export const requestReviewCorrection = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, reviewId } = requestCorrectionParamsSchema.parse(
+    req.params
+  );
+  requestCorrectionBodySchema.parse(req.body);
+
+  const result = await reviewService.requestReviewCorrection(
+    workspaceId,
+    reviewId
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Correction requested successfully",
     data: result,
   });
 };

@@ -4,6 +4,8 @@ import { ApiError } from "../../shared/ApiError.js";
 import {
   CreateAnnotationReplyResult,
   CreateReviewAnnotationResult,
+  NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED,
+  RequestCorrectionResult,
 } from "./review.type.js";
 import {
   CreateAnnotationReplyBodyInput,
@@ -273,6 +275,195 @@ export const createAnnotationReply = async (
 
       return {
         reply,
+      };
+    },
+    {
+      maxWait: 10000,
+      timeout: 15000,
+    }
+  );
+};
+
+// Atomically transitions an item from DESIGN_REVIEW to CORRECTION_NEEDED and notifies the current assigned designer.
+export const requestReviewCorrection = async (
+  workspaceId: string,
+  reviewId: string
+): Promise<RequestCorrectionResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      // 1. Scoped lookup: verify review belongs to a research item in this workspace
+      const targetReview = await tx.reviewSubmission.findFirst({
+        where: {
+          id: reviewId,
+          researchItem: {
+            workspaceId,
+          },
+        },
+        select: {
+          id: true,
+          researchItemId: true,
+          roundNumber: true,
+          researchItem: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+        },
+      });
+
+      if (!targetReview) {
+        throw new ApiError(404, "Review submission not found");
+      }
+
+      // 2. Status validation: correction can only be requested from DESIGN_REVIEW
+      if (targetReview.researchItem.status !== ResearchStatus.DESIGN_REVIEW) {
+        throw new ApiError(
+          409,
+          `Cannot request correction when research item status is ${targetReview.researchItem.status}`
+        );
+      }
+
+      // 3. Current review round rule: must be the latest review round for this research item
+      const latestReview = await tx.reviewSubmission.findFirst({
+        where: {
+          researchItemId: targetReview.researchItemId,
+        },
+        orderBy: {
+          roundNumber: "desc",
+        },
+        select: {
+          id: true,
+          roundNumber: true,
+        },
+      });
+
+      if (!latestReview || latestReview.id !== targetReview.id) {
+        throw new ApiError(
+          409,
+          "Correction can only be requested for the current review round"
+        );
+      }
+
+      // 4. Current designer recipient lookup: must have an active current assignment
+      const currentAssignment = await tx.designAssignment.findFirst({
+        where: {
+          researchItemId: targetReview.researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+          designerId: true,
+        },
+      });
+
+      if (!currentAssignment) {
+        throw new ApiError(
+          500,
+          "No active design assignment found for this research item"
+        );
+      }
+
+      // 5. Designer role invariant: assigned designer must be an active DESIGNER member of the workspace
+      const designerMember = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId: currentAssignment.designerId,
+          },
+        },
+        select: {
+          roles: true,
+        },
+      });
+
+      if (
+        !designerMember ||
+        !designerMember.roles.includes(WorkspaceRole.DESIGNER)
+      ) {
+        throw new ApiError(
+          500,
+          "Assigned designer is no longer a designer in this workspace"
+        );
+      }
+
+      // 6. Concurrency gate: conditional atomic status transition on ResearchItem
+      const updatedItemResult = await tx.researchItem.updateMany({
+        where: {
+          id: targetReview.researchItemId,
+          workspaceId,
+          status: ResearchStatus.DESIGN_REVIEW,
+        },
+        data: {
+          status: ResearchStatus.CORRECTION_NEEDED,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (updatedItemResult.count !== 1) {
+        throw new ApiError(
+          409,
+          "Research item is not in DESIGN_REVIEW status or has already been updated"
+        );
+      }
+
+      // 7. Post-gate race verification: re-verify latest review round and assignment ownership
+      const recheckLatest = await tx.reviewSubmission.findFirst({
+        where: {
+          researchItemId: targetReview.researchItemId,
+        },
+        orderBy: {
+          roundNumber: "desc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!recheckLatest || recheckLatest.id !== targetReview.id) {
+        throw new ApiError(
+          409,
+          "Correction can only be requested for the current review round"
+        );
+      }
+
+      const stillCurrentAssignment = await tx.designAssignment.findFirst({
+        where: {
+          id: currentAssignment.id,
+          researchItemId: targetReview.researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          designerId: true,
+        },
+      });
+
+      if (
+        !stillCurrentAssignment ||
+        stillCurrentAssignment.designerId !== currentAssignment.designerId
+      ) {
+        throw new ApiError(
+          500,
+          "Design assignment changed concurrently during correction request"
+        );
+      }
+
+      // 8. Create exactly one notification for the current assigned designer
+      await tx.notification.create({
+        data: {
+          userId: currentAssignment.designerId,
+          type: NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED,
+          title: "Correction Requested",
+          message: "Your design needs corrections.",
+          researchItemId: targetReview.researchItemId,
+        },
+      });
+
+      return {
+        researchItem: {
+          id: targetReview.researchItemId,
+          status: ResearchStatus.CORRECTION_NEEDED,
+        },
       };
     },
     {

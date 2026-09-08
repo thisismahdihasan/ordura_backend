@@ -1,3 +1,5 @@
+import { ResearchStatus } from "@prisma/client";
+
 export type ReviewAnnotationCreatedBy = {
   id: string;
   name: string | null;
@@ -33,4 +35,14 @@ export type AnnotationReplyItem = {
 
 export type CreateAnnotationReplyResult = {
   reply: AnnotationReplyItem;
+};
+
+export const NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED =
+  "DESIGN_CORRECTION_REQUESTED" as const;
+
+export type RequestCorrectionResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
 };
