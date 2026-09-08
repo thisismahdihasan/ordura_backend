@@ -14,6 +14,7 @@ import {
   ReportDesignIssueResult,
   StartDesignWorkResult,
   SubmitDesignReviewResult,
+  StartCorrectionResult,
 } from "./designer.type.js";
 import {
   ReviewImageDestroyer,
@@ -596,6 +597,139 @@ export const submitAssignedDesignReview = async (
     throw error;
   }
 };
+
+// Atomically transitions an item from CORRECTION_NEEDED to DESIGN_IN_PROGRESS and sets startedAt if not yet initialized.
+export const startCorrection = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string
+): Promise<StartCorrectionResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      // 1. Scoped lookup: verify research item exists in the requested workspace
+      const researchItem = await tx.researchItem.findFirst({
+        where: {
+          id: researchItemId,
+          workspaceId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!researchItem) {
+        throw new ApiError(404, "Research item not found");
+      }
+
+      // 2. Fetch current active design assignment
+      const currentAssignment = await tx.designAssignment.findFirst({
+        where: {
+          researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+          designerId: true,
+          startedAt: true,
+        },
+      });
+
+      if (!currentAssignment || currentAssignment.designerId !== designerId) {
+        throw new ApiError(403, "You are not assigned to this research item");
+      }
+
+      // 3. Status validation: source status must strictly be CORRECTION_NEEDED
+      if (researchItem.status !== ResearchStatus.CORRECTION_NEEDED) {
+        throw new ApiError(
+          409,
+          `Cannot start correction for an item with status ${researchItem.status}`
+        );
+      }
+
+      const now = new Date();
+
+      // 4. Concurrency gate: conditional atomic status transition on ResearchItem
+      const updatedItemResult = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.CORRECTION_NEEDED,
+        },
+        data: {
+          status: ResearchStatus.DESIGN_IN_PROGRESS,
+          updatedAt: now,
+        },
+      });
+
+      if (updatedItemResult.count !== 1) {
+        throw new ApiError(
+          409,
+          "Research item is not in CORRECTION_NEEDED status or has already been updated"
+        );
+      }
+
+      // 5. Conditional startedAt initialization:
+      // Case A: Continuing designer already has startedAt -> preserved as-is.
+      // Case B: Newly reassigned designer has startedAt === null -> initialize to now.
+      if (currentAssignment.startedAt === null) {
+        const updatedAssignmentResult = await tx.designAssignment.updateMany({
+          where: {
+            id: currentAssignment.id,
+            researchItemId,
+            designerId,
+            isCurrent: true,
+            startedAt: null,
+          },
+          data: {
+            startedAt: now,
+          },
+        });
+
+        if (updatedAssignmentResult.count !== 1) {
+          throw new ApiError(
+            409,
+            "Design assignment has already been modified or reassigned"
+          );
+        }
+      }
+
+      // 6. Post-gate race verification: verify assignment is still current and owned by authenticated designer
+      const recheckAssignment = await tx.designAssignment.findFirst({
+        where: {
+          id: currentAssignment.id,
+          researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          designerId: true,
+        },
+      });
+
+      if (
+        !recheckAssignment ||
+        recheckAssignment.designerId !== designerId
+      ) {
+        throw new ApiError(
+          403,
+          "Design assignment changed concurrently during start correction"
+        );
+      }
+
+      return {
+        researchItem: {
+          id: researchItem.id,
+          status: ResearchStatus.DESIGN_IN_PROGRESS,
+        },
+      };
+    },
+    {
+      maxWait: 10000,
+      timeout: 15000,
+    }
+  );
+};
+
 
 
 

@@ -6,6 +6,7 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import {
   getDesignerWorkQueue,
   reportDesignIssue,
+  startCorrection,
   startDesignWork,
   submitDesignReview,
 } from "./designer.controller.js";
@@ -43,6 +44,14 @@ designRouter.post(
   reviewImageUploadMiddleware,
   catchAsync(submitDesignReview)
 );
+
+designRouter.post(
+  "/:researchItemId/start-correction",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(startCorrection)
+);
+
 
 export const DesignerRoutes = designerRouter;
 export const DesignRoutes = designRouter;

@@ -125,3 +125,24 @@ export type SubmitDesignReviewBodyInput = z.infer<
   typeof submitDesignReviewBodySchema
 >;
 
+export const startCorrectionParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type StartCorrectionParamsInput = z.infer<
+  typeof startCorrectionParamsSchema
+>;
+
+export const startCorrectionBodySchema = z
+  .object({})
+  .strict()
+  .optional();
+
+export type StartCorrectionBodyInput = z.infer<
+  typeof startCorrectionBodySchema
+>;
+
+

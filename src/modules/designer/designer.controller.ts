@@ -11,6 +11,8 @@ import {
   getDesignerWorkQueueQuerySchema,
   reportDesignIssueBodySchema,
   reportDesignIssueParamsSchema,
+  startCorrectionBodySchema,
+  startCorrectionParamsSchema,
   startDesignWorkParamsSchema,
   submitDesignReviewBodySchema,
   submitDesignReviewParamsSchema,
@@ -131,5 +133,30 @@ export const submitDesignReview = async (
     data: result,
   });
 };
+
+// Handles HTTP request for starting correction work on an assigned research item.
+export const startCorrection = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = startCorrectionParamsSchema.parse(
+    req.params
+  );
+  startCorrectionBodySchema.parse(req.body);
+
+  const result = await designerService.startCorrection(
+    workspaceId,
+    researchItemId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Design correction started successfully",
+    data: result,
+  });
+};
+
 
 

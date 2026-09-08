@@ -82,4 +82,12 @@ export type SubmitDesignReviewResult = {
 export const NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED =
   "DESIGN_REVIEW_SUBMITTED" as const;
 
+export type StartCorrectionResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+};
+
+
 
