@@ -231,8 +231,7 @@ export const reportAssignedDesignIssue = async (
   designerId: string,
   input: ReportDesignIssueBodyInput
 ): Promise<ReportDesignIssueResult> => {
-  return await prisma.$transaction(
-    async (tx) => {
+  return await prisma.$transaction(async (tx) => {
     // 1. Scoped lookup by item ID and workspace ID
     const researchItem = await tx.researchItem.findFirst({
       where: {
