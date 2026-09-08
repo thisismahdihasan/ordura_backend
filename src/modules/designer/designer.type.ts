@@ -48,3 +48,17 @@ export type StartDesignWorkResult = {
     isCurrent: boolean;
   };
 };
+
+export type ReportDesignIssueResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  issueReport: {
+    id: string;
+    reason: string;
+    details: string | null;
+    createdAt: Date;
+  };
+};
+

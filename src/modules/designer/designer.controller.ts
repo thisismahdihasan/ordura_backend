@@ -4,6 +4,8 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as designerService from "./designer.service.js";
 import {
   getDesignerWorkQueueQuerySchema,
+  reportDesignIssueBodySchema,
+  reportDesignIssueParamsSchema,
   startDesignWorkParamsSchema,
 } from "./designer.validation.js";
 
@@ -55,3 +57,29 @@ export const startDesignWork = async (
     data: result,
   });
 };
+
+// Handles HTTP request for reporting an issue on an assigned research item.
+export const reportDesignIssue = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = reportDesignIssueParamsSchema.parse(
+    req.params
+  );
+  const validatedBody = reportDesignIssueBodySchema.parse(req.body);
+
+  const result = await designerService.reportAssignedDesignIssue(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    validatedBody
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Design issue reported successfully",
+    data: result,
+  });
+};
+

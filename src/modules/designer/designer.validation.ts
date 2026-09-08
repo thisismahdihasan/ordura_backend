@@ -58,3 +58,44 @@ export const startDesignWorkParamsSchema = z.object({
 export type StartDesignWorkParamsInput = z.infer<
   typeof startDesignWorkParamsSchema
 >;
+
+export const ISSUE_REPORT_REASONS = [
+  "REFERENCE_UNCLEAR",
+  "COPYRIGHT_CONCERN",
+  "TOO_COMPLEX",
+  "IMAGE_QUALITY",
+  "OTHER",
+] as const;
+
+export type IssueReportReason = (typeof ISSUE_REPORT_REASONS)[number];
+
+export const reportDesignIssueParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type ReportDesignIssueParamsInput = z.infer<
+  typeof reportDesignIssueParamsSchema
+>;
+
+export const reportDesignIssueBodySchema = z
+  .object({
+    reason: z.enum(ISSUE_REPORT_REASONS, {
+      message:
+        "Invalid issue reason. Allowed values: REFERENCE_UNCLEAR, COPYRIGHT_CONCERN, TOO_COMPLEX, IMAGE_QUALITY, OTHER",
+    }),
+    details: z
+      .string()
+      .trim()
+      .max(1000, "details cannot exceed 1000 characters")
+      .transform((val) => (val.length > 0 ? val : undefined))
+      .optional(),
+  })
+  .strict();
+
+export type ReportDesignIssueBodyInput = z.infer<
+  typeof reportDesignIssueBodySchema
+>;
+

@@ -4,10 +4,12 @@ import { ApiError } from "../../shared/ApiError.js";
 import {
   DESIGNER_QUEUE_ACTIVE_STATUSES,
   GetDesignerWorkQueueQueryInput,
+  ReportDesignIssueBodyInput,
 } from "./designer.validation.js";
 import {
   DesignerWorkQueueItem,
   DesignerWorkQueueResult,
+  ReportDesignIssueResult,
   StartDesignWorkResult,
 } from "./designer.type.js";
 
@@ -216,3 +218,130 @@ export const startDesignWork = async (
     };
   });
 };
+
+// Atomically transitions an assigned research item to ISSUE_REPORTED and records a designer issue report.
+export const reportAssignedDesignIssue = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string,
+  input: ReportDesignIssueBodyInput
+): Promise<ReportDesignIssueResult> => {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Scoped lookup by item ID and workspace ID
+    const researchItem = await tx.researchItem.findFirst({
+      where: {
+        id: researchItemId,
+        workspaceId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!researchItem) {
+      throw new ApiError(404, "Research item not found");
+    }
+
+    // 2. Fetch current assignment
+    const currentAssignment = await tx.designAssignment.findFirst({
+      where: {
+        researchItemId,
+        isCurrent: true,
+      },
+      select: {
+        id: true,
+        designerId: true,
+        isCurrent: true,
+      },
+    });
+
+    if (!currentAssignment) {
+      throw new ApiError(409, "No active assignment found for this research item");
+    }
+
+    // 3. Verify designer ownership of current assignment
+    if (currentAssignment.designerId !== designerId) {
+      throw new ApiError(403, "You are not assigned to this research item");
+    }
+
+    // 4. Status validation: allowed ONLY from ASSIGNED or DESIGN_IN_PROGRESS
+    if (
+      researchItem.status !== ResearchStatus.ASSIGNED &&
+      researchItem.status !== ResearchStatus.DESIGN_IN_PROGRESS
+    ) {
+      throw new ApiError(
+        409,
+        `Cannot report an issue for research item with status ${researchItem.status}`
+      );
+    }
+
+    const now = new Date();
+
+    // 5. Conditional atomic update on ResearchItem status
+    // Serializes concurrent requests on the ResearchItem row
+    const updatedItemResult = await tx.researchItem.updateMany({
+      where: {
+        id: researchItemId,
+        workspaceId,
+        status: {
+          in: [ResearchStatus.ASSIGNED, ResearchStatus.DESIGN_IN_PROGRESS],
+        },
+      },
+      data: {
+        status: ResearchStatus.ISSUE_REPORTED,
+        updatedAt: now,
+      },
+    });
+
+    if (updatedItemResult.count !== 1) {
+      throw new ApiError(
+        409,
+        "Issue has already been reported or item status has changed"
+      );
+    }
+
+    // 6. Post-lock re-check: verify current assignment is STILL owned by this designer
+    // If concurrent admin reassignment committed before this update, isCurrent became false
+    const stillCurrentAssignment = await tx.designAssignment.findFirst({
+      where: {
+        id: currentAssignment.id,
+        researchItemId,
+        designerId,
+        isCurrent: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!stillCurrentAssignment) {
+      throw new ApiError(403, "You are not assigned to this research item");
+    }
+
+    // 7. Create IssueReport atomically
+    const issueReport = await tx.issueReport.create({
+      data: {
+        researchItemId,
+        reportedById: designerId,
+        reason: input.reason,
+        details: input.details ?? null,
+      },
+      select: {
+        id: true,
+        reason: true,
+        details: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      researchItem: {
+        id: researchItem.id,
+        status: ResearchStatus.ISSUE_REPORTED,
+      },
+      issueReport,
+    };
+  });
+};
+
