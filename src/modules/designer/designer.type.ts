@@ -62,3 +62,7 @@ export type ReportDesignIssueResult = {
   };
 };
 
+export const NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED =
+  "DESIGN_ISSUE_REPORTED" as const;
+
+

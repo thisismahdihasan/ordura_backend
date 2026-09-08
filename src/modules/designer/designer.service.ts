@@ -1,4 +1,4 @@
-import { Prisma, ResearchStatus } from "@prisma/client";
+import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import {
@@ -9,6 +9,7 @@ import {
 import {
   DesignerWorkQueueItem,
   DesignerWorkQueueResult,
+  NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED,
   ReportDesignIssueResult,
   StartDesignWorkResult,
 } from "./designer.type.js";
@@ -226,7 +227,8 @@ export const reportAssignedDesignIssue = async (
   designerId: string,
   input: ReportDesignIssueBodyInput
 ): Promise<ReportDesignIssueResult> => {
-  return await prisma.$transaction(async (tx) => {
+  return await prisma.$transaction(
+    async (tx) => {
     // 1. Scoped lookup by item ID and workspace ID
     const researchItem = await tx.researchItem.findFirst({
       where: {
@@ -335,6 +337,37 @@ export const reportAssignedDesignIssue = async (
       },
     });
 
+    // 8. Find all ADMIN members in the same workspace to receive in-app notifications
+    const adminMembers = await tx.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        roles: {
+          has: WorkspaceRole.ADMIN,
+        },
+      },
+      select: {
+        userId: true,
+      },
+    });
+
+    if (adminMembers.length === 0) {
+      throw new ApiError(
+        500,
+        "No workspace administrator found to receive issue notification"
+      );
+    }
+
+    // 9. Atomically create notifications for all admin recipients
+    await tx.notification.createMany({
+      data: adminMembers.map((admin) => ({
+        userId: admin.userId,
+        type: NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED,
+        title: "Design Issue Reported",
+        message: `A designer reported an issue (${input.reason}) on a research item`,
+        researchItemId,
+      })),
+    });
+
     return {
       researchItem: {
         id: researchItem.id,
@@ -342,6 +375,11 @@ export const reportAssignedDesignIssue = async (
       },
       issueReport,
     };
+  },
+  {
+    maxWait: 10000,
+    timeout: 15000,
   });
 };
+
 
