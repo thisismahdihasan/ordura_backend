@@ -65,3 +65,23 @@ export const getDesignerPerformance = async (
     data: result,
   });
 };
+
+// Handles HTTP request for the admin dashboard lister performance.
+export const getListerPerformance = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId } = dashboardOverviewParamsSchema.parse(req.params);
+  const query = dashboardOverviewQuerySchema.parse(req.query);
+
+  const result = await dashboardService.getListerPerformance(
+    workspaceId,
+    query
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Lister performance retrieved successfully",
+    data: result,
+  });
+};

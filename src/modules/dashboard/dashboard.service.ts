@@ -5,6 +5,8 @@ import {
   DashboardPipelineCounts,
   DesignerPerformanceResult,
   DesignerPerformanceRow,
+  ListerPerformanceResult,
+  ListerPerformanceRow,
   ResearcherPerformanceResult,
   ResearcherPerformanceRow,
   ResolvedDashboardDateRange,
@@ -526,5 +528,170 @@ export const getDesignerPerformance = async (
   return {
     dateRange,
     designers,
+  };
+};
+
+// Retrieves lister workload and publishing throughput metrics within the selected cohort window.
+export const getListerPerformance = async (
+  workspaceId: string,
+  query: DashboardOverviewQueryInput
+): Promise<ListerPerformanceResult> => {
+  const { dateRange, filter } = resolveDashboardDateRange(query);
+
+  // 1. Fetch current members with LISTER role and 3 aggregate groups in parallel
+  const [
+    currentListers,
+    assignedGroups,
+    currentInProgressGroups,
+    listedGroups,
+  ] = await Promise.all([
+    prisma.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        roles: {
+          has: WorkspaceRole.LISTER,
+        },
+      },
+      select: {
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    }),
+    prisma.listingAssignment.groupBy({
+      by: ["listerId"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        ...(filter ? { assignedAt: filter } : {}),
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.listingAssignment.groupBy({
+      by: ["listerId"],
+      where: {
+        isCurrent: true,
+        researchItem: {
+          workspaceId,
+          status: ResearchStatus.LISTING_IN_PROGRESS,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.listingResult.groupBy({
+      by: ["listedById"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        ...(filter ? { listedAt: filter } : {}),
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+  ]);
+
+  const listersMap = new Map<string, ListerPerformanceRow>();
+
+  // 2. Initialize map with all current LISTER members (even if all metrics = 0)
+  for (const member of currentListers) {
+    listersMap.set(member.userId, {
+      userId: member.userId,
+      name: member.user.name,
+      email: member.user.email,
+      assignedCount: 0,
+      currentInProgress: 0,
+      listedCount: 0,
+    });
+  }
+
+  // 3. Identify any historical lister who contributed in this window or is in currentInProgress
+  const missingListerIds = new Set<string>();
+  for (const g of assignedGroups) {
+    if (!listersMap.has(g.listerId)) {
+      missingListerIds.add(g.listerId);
+    }
+  }
+  for (const g of currentInProgressGroups) {
+    if (!listersMap.has(g.listerId)) {
+      missingListerIds.add(g.listerId);
+    }
+  }
+  for (const g of listedGroups) {
+    if (!listersMap.has(g.listedById)) {
+      missingListerIds.add(g.listedById);
+    }
+  }
+
+  // 4. Batch-fetch identity for any historical listers
+  if (missingListerIds.size > 0) {
+    const historicalUsers = await prisma.user.findMany({
+      where: {
+        id: { in: Array.from(missingListerIds) },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    for (const u of historicalUsers) {
+      listersMap.set(u.id, {
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        assignedCount: 0,
+        currentInProgress: 0,
+        listedCount: 0,
+      });
+    }
+  }
+
+  // 5. Populate metric counts
+  for (const g of assignedGroups) {
+    const row = listersMap.get(g.listerId);
+    if (row) row.assignedCount = g._count._all;
+  }
+  for (const g of currentInProgressGroups) {
+    const row = listersMap.get(g.listerId);
+    if (row) row.currentInProgress = g._count._all;
+  }
+  for (const g of listedGroups) {
+    const row = listersMap.get(g.listedById);
+    if (row) row.listedCount = g._count._all;
+  }
+
+  // 6. Deterministic sort: listedCount DESC -> assignedCount DESC -> name ASC -> userId ASC
+  const listers = Array.from(listersMap.values()).sort((a, b) => {
+    if (b.listedCount !== a.listedCount) {
+      return b.listedCount - a.listedCount;
+    }
+    if (b.assignedCount !== a.assignedCount) {
+      return b.assignedCount - a.assignedCount;
+    }
+    const nameA = a.name ?? "";
+    const nameB = b.name ?? "";
+    const nameDiff = nameA.localeCompare(nameB);
+    if (nameDiff !== 0) {
+      return nameDiff;
+    }
+    return a.userId.localeCompare(b.userId);
+  });
+
+  return {
+    dateRange,
+    listers,
   };
 };

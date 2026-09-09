@@ -58,3 +58,17 @@ export type DesignerPerformanceResult = {
   dateRange: ResolvedDashboardDateRange;
   designers: DesignerPerformanceRow[];
 };
+
+export type ListerPerformanceRow = {
+  userId: string;
+  name: string | null;
+  email: string;
+  assignedCount: number;
+  currentInProgress: number;
+  listedCount: number;
+};
+
+export type ListerPerformanceResult = {
+  dateRange: ResolvedDashboardDateRange;
+  listers: ListerPerformanceRow[];
+};

@@ -6,6 +6,7 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import {
   getDashboardOverview,
   getDesignerPerformance,
+  getListerPerformance,
   getResearcherPerformance,
 } from "./dashboard.controller.js";
 
@@ -30,6 +31,13 @@ router.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(getDesignerPerformance)
+);
+
+router.get(
+  "/dashboard/listers",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getListerPerformance)
 );
 
 export const DashboardRoutes = router;
