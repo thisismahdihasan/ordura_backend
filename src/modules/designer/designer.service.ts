@@ -537,6 +537,7 @@ export const submitAssignedDesignReview = async (
             id: true,
             roundNumber: true,
             imageUrl: true,
+            imageDeletedAt: true,
             note: true,
             submittedAt: true,
           },
@@ -589,7 +590,11 @@ export const submitAssignedDesignReview = async (
           reviewSubmission: {
             id: reviewSubmission.id,
             roundNumber: reviewSubmission.roundNumber,
-            imageUrl: reviewSubmission.imageUrl,
+            imageUrl:
+              reviewSubmission.imageDeletedAt === null
+                ? reviewSubmission.imageUrl
+                : null,
+            imageDeletedAt: reviewSubmission.imageDeletedAt,
             note: reviewSubmission.note,
             submittedAt: reviewSubmission.submittedAt,
           },

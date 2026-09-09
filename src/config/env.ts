@@ -32,6 +32,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().trim().optional(),
   GOOGLE_REDIRECT_URI: z.string().trim().optional(),
   GOOGLE_TOKEN_ENCRYPTION_KEY: z.string().trim().optional(),
+  CRON_SECRET: z
+    .string()
+    .trim()
+    .min(32, "CRON_SECRET must be at least 32 characters"),
 })
 .superRefine((data, ctx) => {
   const hasCloudName = Boolean(data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_CLOUD_NAME.trim().length > 0);

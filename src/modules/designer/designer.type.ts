@@ -73,7 +73,8 @@ export type SubmitDesignReviewResult = {
   reviewSubmission: {
     id: string;
     roundNumber: number;
-    imageUrl: string;
+    imageUrl: string | null;
+    imageDeletedAt: Date | null;
     note: string | null;
     submittedAt: Date;
   };

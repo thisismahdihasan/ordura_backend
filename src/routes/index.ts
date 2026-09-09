@@ -5,6 +5,7 @@ import { WorkspaceRoutes } from "../modules/workspace/workspace.route.js";
 import { WorkspaceInviteRoutes } from "../modules/workspaceInvite/workspaceInvite.route.js";
 import { GoogleDriveCallbackRoutes } from "../modules/googleDrive/googleDrive.route.js";
 import { NotificationRoutes } from "../modules/notification/notification.route.js";
+import { SystemRoutes } from "../modules/system/system.route.js";
 
 const router: Router = express.Router();
 
@@ -37,6 +38,10 @@ const moduleRoutes: ModuleRoute[] = [
   {
     path: "/notifications",
     route: NotificationRoutes,
+  },
+  {
+    path: "/system",
+    route: SystemRoutes,
   },
 ];
 
