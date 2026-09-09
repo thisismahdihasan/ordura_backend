@@ -1,4 +1,8 @@
 import { Router } from "express";
+import {
+  loginRateLimiter,
+  registerRateLimiter,
+} from "../../middleware/authRateLimit.js";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
@@ -10,8 +14,8 @@ import {
 
 const router: Router = Router();
 
-router.post("/register", catchAsync(registerUser));
-router.post("/login", catchAsync(loginUser));
+router.post("/register", registerRateLimiter, catchAsync(registerUser));
+router.post("/login", loginRateLimiter, catchAsync(loginUser));
 router.post("/logout", catchAsync(logoutUser));
 router.get("/me", requireAuth, catchAsync(getCurrentUser));
 
