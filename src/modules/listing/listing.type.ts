@@ -69,3 +69,15 @@ export type ListerWorkQueueResult = {
   items: ListerWorkQueueItem[];
   pagination: PaginationMeta;
 };
+
+export type StartListingResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  assignment: {
+    id: string;
+    startedAt: Date;
+  };
+};
+

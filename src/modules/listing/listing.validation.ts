@@ -59,3 +59,24 @@ export const backfillListingAssignmentsParamsSchema = z
 export type BackfillListingAssignmentsParamsInput = z.infer<
   typeof backfillListingAssignmentsParamsSchema
 >;
+
+export const startListingParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type StartListingParamsInput = z.infer<
+  typeof startListingParamsSchema
+>;
+
+export const startListingBodySchema = z
+  .object({})
+  .strict()
+  .optional();
+
+export type StartListingBodyInput = z.infer<
+  typeof startListingBodySchema
+>;
+

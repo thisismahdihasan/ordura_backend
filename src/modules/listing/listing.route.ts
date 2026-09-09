@@ -6,6 +6,7 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import {
   backfillListingAssignments,
   getListerWorkQueue,
+  startListing,
 } from "./listing.controller.js";
 
 const listerRouter: Router = Router({ mergeParams: true });
@@ -18,6 +19,13 @@ listerRouter.get(
 );
 
 const listingRouter: Router = Router({ mergeParams: true });
+
+listingRouter.post(
+  "/:researchItemId/start",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.LISTER),
+  catchAsync(startListing)
+);
 
 listingRouter.post(
   "/backfill-assignments",

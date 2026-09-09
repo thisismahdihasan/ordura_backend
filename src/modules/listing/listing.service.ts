@@ -1,10 +1,12 @@
 import { Prisma, ResearchStatus } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
+import { ApiError } from "../../shared/ApiError.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
 import {
   BackfillListingResult,
   ListerWorkQueueItem,
   ListerWorkQueueResult,
+  StartListingResult,
 } from "./listing.type.js";
 import {
   GetListerWorkQueueQueryInput,
@@ -200,3 +202,127 @@ export const backfillUnassignedListings = async (
     }
   );
 };
+
+// Atomically transitions an assigned research item to in-progress and sets startedAt on the current listing assignment.
+export const startListingWork = async (
+  workspaceId: string,
+  researchItemId: string,
+  listerId: string
+): Promise<StartListingResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      // 1. Authoritative transaction-level row lock on ResearchItem
+      await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
+
+      // 2. Scoped lookup: verify research item exists in this workspace
+      const researchItem = await tx.researchItem.findFirst({
+        where: {
+          id: researchItemId,
+          workspaceId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!researchItem) {
+        throw new ApiError(404, "Research item not found");
+      }
+
+      // 3. Status validation: allowed ONLY from READY_FOR_LISTING
+      if (researchItem.status !== ResearchStatus.READY_FOR_LISTING) {
+        throw new ApiError(
+          409,
+          `Cannot start listing for research item with status ${researchItem.status}`
+        );
+      }
+
+      // 4. Fetch current assignment
+      const currentAssignment = await tx.listingAssignment.findFirst({
+        where: {
+          researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+          listerId: true,
+          startedAt: true,
+        },
+      });
+
+      if (!currentAssignment) {
+        throw new ApiError(
+          409,
+          "No active assignment found for this research item"
+        );
+      }
+
+      // 5. Verify lister ownership of the current assignment
+      if (currentAssignment.listerId !== listerId) {
+        throw new ApiError(403, "You are not assigned to this research item");
+      }
+
+      // 6. Double-start protection: startedAt must be null
+      if (currentAssignment.startedAt !== null) {
+        throw new ApiError(409, "Listing work has already been started");
+      }
+
+      const now = new Date();
+
+      // 7. Conditional atomic transition of ResearchItem status to LISTING_IN_PROGRESS
+      const updatedItemResult = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.READY_FOR_LISTING,
+        },
+        data: {
+          status: ResearchStatus.LISTING_IN_PROGRESS,
+          updatedAt: now,
+        },
+      });
+
+      if (updatedItemResult.count !== 1) {
+        throw new ApiError(
+          409,
+          "Listing work has already been started or status has changed"
+        );
+      }
+
+      // 8. Conditional atomic update on current ListingAssignment
+      const updatedAssignmentResult = await tx.listingAssignment.updateMany({
+        where: {
+          id: currentAssignment.id,
+          researchItemId,
+          listerId,
+          isCurrent: true,
+          startedAt: null,
+        },
+        data: {
+          startedAt: now,
+        },
+      });
+
+      if (updatedAssignmentResult.count !== 1) {
+        throw new ApiError(409, "Listing work has already been started");
+      }
+
+      return {
+        researchItem: {
+          id: researchItem.id,
+          status: ResearchStatus.LISTING_IN_PROGRESS,
+        },
+        assignment: {
+          id: currentAssignment.id,
+          startedAt: now,
+        },
+      };
+    },
+    {
+      maxWait: 10000,
+      timeout: 20000,
+    }
+  );
+};
+

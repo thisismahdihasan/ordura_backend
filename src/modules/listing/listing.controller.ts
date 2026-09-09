@@ -5,6 +5,8 @@ import * as listingService from "./listing.service.js";
 import {
   backfillListingAssignmentsParamsSchema,
   getListerWorkQueueQuerySchema,
+  startListingBodySchema,
+  startListingParamsSchema,
 } from "./listing.validation.js";
 
 // Handles HTTP request for fetching the authenticated lister's active work queue.
@@ -50,3 +52,28 @@ export const backfillListingAssignments = async (
     data: result,
   });
 };
+
+// Handles HTTP request for starting listing work on an assigned research item.
+export const startListing = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = startListingParamsSchema.parse(
+    req.params
+  );
+  startListingBodySchema.parse(req.body);
+
+  const result = await listingService.startListingWork(
+    workspaceId,
+    researchItemId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Listing work started successfully",
+    data: result,
+  });
+};
+
