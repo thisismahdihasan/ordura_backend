@@ -25,3 +25,23 @@ export const getDashboardOverview = async (
     data: result,
   });
 };
+
+// Handles HTTP request for the admin dashboard researcher performance.
+export const getResearcherPerformance = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId } = dashboardOverviewParamsSchema.parse(req.params);
+  const query = dashboardOverviewQuerySchema.parse(req.query);
+
+  const result = await dashboardService.getResearcherPerformance(
+    workspaceId,
+    query
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Researcher performance retrieved successfully",
+    data: result,
+  });
+};

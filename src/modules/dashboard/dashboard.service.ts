@@ -1,8 +1,10 @@
-import { ResearchStatus } from "@prisma/client";
+import { ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import {
   DashboardOverviewResult,
   DashboardPipelineCounts,
+  ResearcherPerformanceResult,
+  ResearcherPerformanceRow,
   ResolvedDashboardDateRange,
 } from "./dashboard.type.js";
 import { DashboardOverviewQueryInput } from "./dashboard.validation.js";
@@ -186,5 +188,115 @@ export const getDashboardOverview = async (
     dateRange,
     totalResearch,
     pipeline,
+  };
+};
+
+// Retrieves researcher productivity metrics within the selected cohort window.
+export const getResearcherPerformance = async (
+  workspaceId: string,
+  query: DashboardOverviewQueryInput
+): Promise<ResearcherPerformanceResult> => {
+  const { dateRange, filter } = resolveDashboardDateRange(query);
+
+  // 1. Fetch current members with RESEARCHER role and grouped research item counts in parallel
+  const [currentResearchers, groupedCounts] = await Promise.all([
+    prisma.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        roles: {
+          has: WorkspaceRole.RESEARCHER,
+        },
+      },
+      select: {
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    }),
+    prisma.researchItem.groupBy({
+      by: ["createdById"],
+      where: {
+        workspaceId,
+        ...(filter ? { createdAt: filter } : {}),
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+  ]);
+
+  const researchersMap = new Map<string, ResearcherPerformanceRow>();
+
+  // 2. Initialize map with all current RESEARCHER members (even if researchCount = 0)
+  for (const member of currentResearchers) {
+    researchersMap.set(member.userId, {
+      userId: member.userId,
+      name: member.user.name,
+      email: member.user.email,
+      researchCount: 0,
+    });
+  }
+
+  // 3. Find any creator who has research items in this range but is not currently a RESEARCHER member
+  const missingCreatorIds: string[] = [];
+  for (const group of groupedCounts) {
+    if (!researchersMap.has(group.createdById)) {
+      missingCreatorIds.push(group.createdById);
+    }
+  }
+
+  // 4. Batch-fetch identity for any historical creators
+  if (missingCreatorIds.length > 0) {
+    const historicalUsers = await prisma.user.findMany({
+      where: {
+        id: { in: missingCreatorIds },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    for (const u of historicalUsers) {
+      researchersMap.set(u.id, {
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        researchCount: 0,
+      });
+    }
+  }
+
+  // 5. Populate researchCount from the grouped query results
+  for (const group of groupedCounts) {
+    const row = researchersMap.get(group.createdById);
+    if (row) {
+      row.researchCount = group._count._all;
+    }
+  }
+
+  // 6. Deterministic sort: researchCount DESC -> name ASC -> userId ASC
+  const researchers = Array.from(researchersMap.values()).sort((a, b) => {
+    if (b.researchCount !== a.researchCount) {
+      return b.researchCount - a.researchCount;
+    }
+    const nameA = a.name ?? "";
+    const nameB = b.name ?? "";
+    const nameDiff = nameA.localeCompare(nameB);
+    if (nameDiff !== 0) {
+      return nameDiff;
+    }
+    return a.userId.localeCompare(b.userId);
+  });
+
+  return {
+    dateRange,
+    researchers,
   };
 };

@@ -29,3 +29,15 @@ export type DashboardOverviewResult = {
   totalResearch: number;
   pipeline: DashboardPipelineCounts;
 };
+
+export type ResearcherPerformanceRow = {
+  userId: string;
+  name: string | null;
+  email: string;
+  researchCount: number;
+};
+
+export type ResearcherPerformanceResult = {
+  dateRange: ResolvedDashboardDateRange;
+  researchers: ResearcherPerformanceRow[];
+};

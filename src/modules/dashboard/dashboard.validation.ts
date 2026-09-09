@@ -107,3 +107,6 @@ export const dashboardOverviewQuerySchema = z
 export type DashboardOverviewQueryInput = z.infer<
   typeof dashboardOverviewQuerySchema
 >;
+
+export const dashboardDateRangeQuerySchema = dashboardOverviewQuerySchema;
+export type DashboardDateRangeQueryInput = DashboardOverviewQueryInput;
