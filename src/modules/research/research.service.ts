@@ -16,6 +16,7 @@ import {
   SafeResearchItem,
   SafeResearchItemDetail,
 } from "./research.type.js";
+import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 
 export const safeResearchItemSelect = {
   id: true,
@@ -131,6 +132,9 @@ export const createResearchItem = async (
             isCurrent: true,
           },
           select: { id: true },
+        });
+        await tx.notification.create({
+          data: { userId: chosenDesignerId, type: NOTIFICATION_TYPE_DESIGN_ASSIGNED, title: "Design Assigned", message: "You have been assigned a new design.", researchItemId: item.id },
         });
       }
 
@@ -430,6 +434,9 @@ export const reassignResearchDesigner = async (
         isCurrent: true,
       },
     });
+    await tx.notification.create({
+      data: { userId: designerId, type: NOTIFICATION_TYPE_DESIGN_ASSIGNED, title: "Design Assigned", message: "You have been assigned a new design.", researchItemId },
+    });
 
     // 9. Status transition logic
     let finalStatus = lockedItem.status;
@@ -460,4 +467,3 @@ export const reassignResearchDesigner = async (
     timeout: 15000,
   });
 };
-
