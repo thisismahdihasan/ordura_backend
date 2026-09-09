@@ -2,10 +2,12 @@ import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { decryptGoogleRefreshToken } from "../googleDrive/googleDrive.crypto.js";
+import { extractEtsyListing } from "../research/research.helper.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
 import { defaultFinalAssetDownloader } from "./listing.drive.js";
 import {
   BackfillListingResult,
+  CompleteListingResult,
   FinalAssetDownloadDescriptor,
   FinalAssetDownloader,
   ListerWorkQueueItem,
@@ -15,6 +17,7 @@ import {
 import {
   GetListerWorkQueueQueryInput,
   LISTER_QUEUE_ACTIVE_STATUSES,
+  CompleteListingBodyInput,
 } from "./listing.validation.js";
 
 const LISTER_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
@@ -430,4 +433,147 @@ export const getAuthorizedFinalAssetDownload = async (
     mimeType: asset.mimeType,
     stream,
   };
+};
+
+// Atomically completes listing work, preserves assignment history, and creates the sole listing result.
+export const completeListingWork = async (
+  workspaceId: string,
+  researchItemId: string,
+  listerId: string,
+  input: CompleteListingBodyInput
+): Promise<CompleteListingResult> => {
+  const etsyListingUrl = input.etsyListingUrl
+    ? extractEtsyListing(input.etsyListingUrl).normalizedUrl
+    : null;
+
+  return await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
+
+      const researchItem = await tx.researchItem.findFirst({
+        where: {
+          id: researchItemId,
+          workspaceId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!researchItem) {
+        throw new ApiError(404, "Research item not found");
+      }
+
+      if (researchItem.status !== ResearchStatus.LISTING_IN_PROGRESS) {
+        throw new ApiError(
+          409,
+          `Cannot complete listing for research item with status ${researchItem.status}`
+        );
+      }
+
+      const currentAssignment = await tx.listingAssignment.findFirst({
+        where: {
+          researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+          listerId: true,
+          startedAt: true,
+          completedAt: true,
+        },
+      });
+
+      if (!currentAssignment) {
+        throw new ApiError(409, "No active assignment found for this research item");
+      }
+
+      if (currentAssignment.listerId !== listerId) {
+        throw new ApiError(403, "You are not assigned to this research item");
+      }
+
+      if (currentAssignment.startedAt === null) {
+        throw new ApiError(409, "Listing work has not been started");
+      }
+
+      if (currentAssignment.completedAt !== null) {
+        throw new ApiError(409, "Listing work has already been completed");
+      }
+
+      const existingResult = await tx.listingResult.findUnique({
+        where: { researchItemId },
+        select: { id: true },
+      });
+
+      if (existingResult) {
+        throw new ApiError(409, "A listing result already exists for this research item");
+      }
+
+      const now = new Date();
+      const itemUpdate = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.LISTING_IN_PROGRESS,
+        },
+        data: {
+          status: ResearchStatus.LISTED,
+          updatedAt: now,
+        },
+      });
+
+      if (itemUpdate.count !== 1) {
+        throw new ApiError(409, "Listing status has changed");
+      }
+
+      const assignmentUpdate = await tx.listingAssignment.updateMany({
+        where: {
+          id: currentAssignment.id,
+          researchItemId,
+          listerId,
+          isCurrent: true,
+          startedAt: { not: null },
+          completedAt: null,
+        },
+        data: {
+          completedAt: now,
+        },
+      });
+
+      if (assignmentUpdate.count !== 1) {
+        throw new ApiError(409, "Listing work has already been completed");
+      }
+
+      const listingResult = await tx.listingResult.create({
+        data: {
+          researchItemId,
+          etsyListingUrl,
+          listedById: listerId,
+          listedAt: now,
+        },
+        select: {
+          id: true,
+          etsyListingUrl: true,
+          listedAt: true,
+        },
+      });
+
+      return {
+        researchItem: {
+          id: researchItem.id,
+          status: ResearchStatus.LISTED,
+        },
+        assignment: {
+          id: currentAssignment.id,
+          completedAt: now,
+        },
+        listingResult,
+      };
+    },
+    {
+      maxWait: 10000,
+      timeout: 20000,
+    }
+  );
 };

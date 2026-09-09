@@ -95,3 +95,19 @@ export type FinalAssetDownloader = {
     refreshToken: string;
   }) => Promise<Readable>;
 };
+
+export type CompleteListingResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  assignment: {
+    id: string;
+    completedAt: Date;
+  };
+  listingResult: {
+    id: string;
+    etsyListingUrl: string | null;
+    listedAt: Date;
+  };
+};

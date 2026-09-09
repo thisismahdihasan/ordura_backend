@@ -90,3 +90,31 @@ export const downloadFinalAssetParamsSchema = z
 export type DownloadFinalAssetParamsInput = z.infer<
   typeof downloadFinalAssetParamsSchema
 >;
+
+export const completeListingParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type CompleteListingParamsInput = z.infer<
+  typeof completeListingParamsSchema
+>;
+
+export const completeListingBodySchema = z
+  .object({
+    etsyListingUrl: z
+      .string()
+      .trim()
+      .max(2048, "etsyListingUrl cannot exceed 2048 characters")
+      .nullable()
+      .optional()
+      .transform((value) => (value && value.length > 0 ? value : null)),
+  })
+  .strict()
+  .default(() => ({ etsyListingUrl: null }));
+
+export type CompleteListingBodyInput = z.infer<
+  typeof completeListingBodySchema
+>;

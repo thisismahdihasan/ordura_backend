@@ -9,6 +9,8 @@ import {
   startListingBodySchema,
   startListingParamsSchema,
   downloadFinalAssetParamsSchema,
+  completeListingBodySchema,
+  completeListingParamsSchema,
 } from "./listing.validation.js";
 
 const safeDownloadContentType = (mimeType: string): string => {
@@ -106,6 +108,31 @@ export const startListing = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Listing work started successfully",
+    data: result,
+  });
+};
+
+// Handles completion of listing work by the current assigned lister.
+export const completeListing = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = completeListingParamsSchema.parse(
+    req.params
+  );
+  const input = completeListingBodySchema.parse(req.body);
+
+  const result = await listingService.completeListingWork(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    input
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Listing completed successfully",
     data: result,
   });
 };
