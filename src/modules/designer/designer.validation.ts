@@ -268,3 +268,23 @@ export const validateFinalAssetFile = (file: {
     mimeType: normalizedMime,
   };
 };
+
+export const completeDesignParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type CompleteDesignParamsInput = z.infer<
+  typeof completeDesignParamsSchema
+>;
+
+export const completeDesignBodySchema = z
+  .object({})
+  .strict()
+  .optional();
+
+export type CompleteDesignBodyInput = z.infer<
+  typeof completeDesignBodySchema
+>;

@@ -21,6 +21,7 @@ import {
   SubmitDesignReviewResult,
   StartCorrectionResult,
   UploadFinalAssetsResult,
+  CompleteDesignResult,
 } from "./designer.type.js";
 import {
   ReviewImageDestroyer,
@@ -1077,4 +1078,149 @@ export const uploadFinalAssets = async (
       mimeType: asset.mimeType,
     })),
   };
+};
+
+// Atomically completes the designer workflow after final assets are uploaded, transitioning status to READY_FOR_LISTING.
+export const completeDesignWork = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string
+): Promise<CompleteDesignResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      // 1. Authoritative transaction-level row lock on ResearchItem
+      await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
+
+      // 2. Scoped lookup: verify research item exists in this workspace
+      const researchItem = await tx.researchItem.findFirst({
+        where: {
+          id: researchItemId,
+          workspaceId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!researchItem) {
+        throw new ApiError(404, "Research item not found");
+      }
+
+      // 3. Status validation: allowed ONLY from DESIGN_APPROVED
+      if (researchItem.status !== ResearchStatus.DESIGN_APPROVED) {
+        throw new ApiError(
+          409,
+          `Cannot complete design for research item with status ${researchItem.status}`
+        );
+      }
+
+      // 4. Current assignment verification: only current assigned designer may complete
+      const currentAssignment = await tx.designAssignment.findFirst({
+        where: {
+          researchItemId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+          designerId: true,
+          startedAt: true,
+          completedAt: true,
+        },
+      });
+
+      if (!currentAssignment) {
+        throw new ApiError(409, "No active assignment found for this research item");
+      }
+
+      if (currentAssignment.designerId !== designerId) {
+        throw new ApiError(403, "You are not assigned to this research item");
+      }
+
+      // 5. Final asset prerequisite: at least one FinalAsset must exist
+      const finalAssetCount = await tx.finalAsset.count({
+        where: { researchItemId },
+      });
+
+      if (finalAssetCount === 0) {
+        throw new ApiError(
+          409,
+          "Final assets must be uploaded before completing the design."
+        );
+      }
+
+      // 6. Approval invariant: latest review exists and was approved
+      const latestReview = await tx.reviewSubmission.findFirst({
+        where: { researchItemId },
+        orderBy: { roundNumber: "desc" },
+        select: {
+          id: true,
+          approvedAt: true,
+        },
+      });
+
+      if (!latestReview || !latestReview.approvedAt) {
+        throw new ApiError(
+          500,
+          "Approved review submission record not found for this design"
+        );
+      }
+
+      const now = new Date();
+
+      // 7. Atomic status transition to READY_FOR_LISTING
+      const updatedItemResult = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.DESIGN_APPROVED,
+        },
+        data: {
+          status: ResearchStatus.READY_FOR_LISTING,
+          updatedAt: now,
+        },
+      });
+
+      if (updatedItemResult.count !== 1) {
+        throw new ApiError(
+          409,
+          "Design has already been completed or status has changed"
+        );
+      }
+
+      // 8. Atomically set completedAt on current DesignAssignment if currently null
+      let completedAt = currentAssignment.completedAt;
+      if (completedAt === null) {
+        const updateAssignmentResult = await tx.designAssignment.updateMany({
+          where: {
+            id: currentAssignment.id,
+            researchItemId,
+            designerId,
+            isCurrent: true,
+            completedAt: null,
+          },
+          data: {
+            completedAt: now,
+          },
+        });
+
+        if (updateAssignmentResult.count === 1) {
+          completedAt = now;
+        }
+      }
+
+      return {
+        researchItem: {
+          id: researchItemId,
+          status: ResearchStatus.READY_FOR_LISTING,
+        },
+        finalAssetCount,
+        completedAt: completedAt ?? now,
+      };
+    },
+    {
+      maxWait: 10000,
+      timeout: 15000,
+    }
+  );
 };

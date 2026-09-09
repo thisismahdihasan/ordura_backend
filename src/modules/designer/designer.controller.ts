@@ -19,6 +19,8 @@ import {
   submitDesignReviewBodySchema,
   submitDesignReviewParamsSchema,
   uploadFinalAssetsParamsSchema,
+  completeDesignBodySchema,
+  completeDesignParamsSchema,
 } from "./designer.validation.js";
 
 // Handles HTTP request for fetching the authenticated designer's active work queue.
@@ -208,4 +210,28 @@ export const uploadFinalAssets = async (
       }
     }
   }
+};
+
+// Handles HTTP request for completing design work after final assets upload, transitioning status to READY_FOR_LISTING.
+export const completeDesign = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = completeDesignParamsSchema.parse(
+    req.params
+  );
+  completeDesignBodySchema.parse(req.body);
+
+  const result = await designerService.completeDesignWork(
+    workspaceId,
+    researchItemId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Design completed and marked ready for listing successfully",
+    data: result,
+  });
 };

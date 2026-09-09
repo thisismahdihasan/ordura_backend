@@ -141,3 +141,12 @@ export type FinalAssetStorageUploader = {
     refreshToken: string;
   }) => Promise<void>;
 };
+
+export type CompleteDesignResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  finalAssetCount: number;
+  completedAt: Date;
+};

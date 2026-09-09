@@ -10,6 +10,7 @@ import {
   startDesignWork,
   submitDesignReview,
   uploadFinalAssets,
+  completeDesign,
 } from "./designer.controller.js";
 import { reviewImageUploadMiddleware } from "./designer.upload.js";
 import { finalAssetsUploadMiddleware } from "./designer.final-asset-upload.js";
@@ -60,6 +61,13 @@ designRouter.post(
   requireWorkspaceRole(WorkspaceRole.DESIGNER),
   finalAssetsUploadMiddleware,
   catchAsync(uploadFinalAssets)
+);
+
+designRouter.post(
+  "/:researchItemId/complete",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(completeDesign)
 );
 
 
