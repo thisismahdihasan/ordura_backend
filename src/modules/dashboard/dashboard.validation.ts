@@ -110,3 +110,14 @@ export type DashboardOverviewQueryInput = z.infer<
 
 export const dashboardDateRangeQuerySchema = dashboardOverviewQuerySchema;
 export type DashboardDateRangeQueryInput = DashboardOverviewQueryInput;
+
+export const userActivityParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    userId: z.string().trim().min(1, "userId is required"),
+  })
+  .strict();
+
+export type UserActivityParamsInput = z.infer<
+  typeof userActivityParamsSchema
+>;

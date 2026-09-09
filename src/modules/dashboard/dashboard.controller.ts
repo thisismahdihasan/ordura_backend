@@ -3,6 +3,7 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import {
   dashboardOverviewParamsSchema,
   dashboardOverviewQuerySchema,
+  userActivityParamsSchema,
 } from "./dashboard.validation.js";
 import * as dashboardService from "./dashboard.service.js";
 
@@ -82,6 +83,27 @@ export const getListerPerformance = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Lister performance retrieved successfully",
+    data: result,
+  });
+};
+
+// Handles HTTP request for inspecting a workspace member's activity and throughput metrics.
+export const getUserActivity = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, userId } = userActivityParamsSchema.parse(req.params);
+  const query = dashboardOverviewQuerySchema.parse(req.query);
+
+  const result = await dashboardService.getUserActivity(
+    workspaceId,
+    userId,
+    query
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "User activity retrieved successfully",
     data: result,
   });
 };

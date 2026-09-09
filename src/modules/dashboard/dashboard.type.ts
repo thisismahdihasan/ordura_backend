@@ -1,3 +1,5 @@
+import { ResearchStatus, WorkspaceRole } from "@prisma/client";
+
 export type DashboardDatePreset =
   | "all"
   | "today"
@@ -71,4 +73,54 @@ export type ListerPerformanceRow = {
 export type ListerPerformanceResult = {
   dateRange: ResolvedDashboardDateRange;
   listers: ListerPerformanceRow[];
+};
+
+export type UserActivitySummaryResearch = {
+  totalCreated: number;
+};
+
+export type UserActivitySummaryDesign = {
+  assignedCount: number;
+  currentInProgress: number;
+  submittedCount: number;
+  approvedCount: number;
+  correctionsCount: number;
+  completedCount: number;
+};
+
+export type UserActivitySummaryListing = {
+  assignedCount: number;
+  currentInProgress: number;
+  listedCount: number;
+};
+
+export type UserActivitySummary = {
+  research: UserActivitySummaryResearch | null;
+  design: UserActivitySummaryDesign | null;
+  listing: UserActivitySummaryListing | null;
+};
+
+export type UserActivityRecentItemRole = "RESEARCHER" | "DESIGNER" | "LISTER";
+
+export type UserActivityRecentItem = {
+  id: string;
+  title: string | null;
+  status: ResearchStatus;
+  activityRole: UserActivityRecentItemRole;
+  updatedAt: string;
+};
+
+export type UserActivityUserInfo = {
+  id: string;
+  name: string | null;
+  email: string;
+  roles: WorkspaceRole[];
+  joinedAt: string;
+};
+
+export type UserActivityResult = {
+  dateRange: ResolvedDashboardDateRange;
+  user: UserActivityUserInfo;
+  summary: UserActivitySummary;
+  recentItems: UserActivityRecentItem[];
 };

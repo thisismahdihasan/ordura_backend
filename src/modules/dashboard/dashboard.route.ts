@@ -8,6 +8,7 @@ import {
   getDesignerPerformance,
   getListerPerformance,
   getResearcherPerformance,
+  getUserActivity,
 } from "./dashboard.controller.js";
 
 const router: Router = Router({ mergeParams: true });
@@ -38,6 +39,13 @@ router.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(getListerPerformance)
+);
+
+router.get(
+  "/users/:userId/activity",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getUserActivity)
 );
 
 export const DashboardRoutes = router;

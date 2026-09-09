@@ -1,5 +1,6 @@
 import { ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
+import { ApiError } from "../../shared/ApiError.js";
 import {
   DashboardOverviewResult,
   DashboardPipelineCounts,
@@ -10,6 +11,12 @@ import {
   ResearcherPerformanceResult,
   ResearcherPerformanceRow,
   ResolvedDashboardDateRange,
+  UserActivityRecentItem,
+  UserActivityRecentItemRole,
+  UserActivityResult,
+  UserActivitySummaryDesign,
+  UserActivitySummaryListing,
+  UserActivitySummaryResearch,
 } from "./dashboard.type.js";
 import { DashboardOverviewQueryInput } from "./dashboard.validation.js";
 
@@ -693,5 +700,259 @@ export const getListerPerformance = async (
   return {
     dateRange,
     listers,
+  };
+};
+
+// Retrieves activity and throughput metrics for a specific workspace member.
+export const getUserActivity = async (
+  workspaceId: string,
+  userId: string,
+  query: DashboardOverviewQueryInput
+): Promise<UserActivityResult> => {
+  // 1. Verify target user is a member of the target workspace
+  const member = await prisma.workspaceMember.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId,
+        userId,
+      },
+    },
+    select: {
+      id: true,
+      roles: true,
+      createdAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  if (!member) {
+    throw new ApiError(404, "User not found in this workspace");
+  }
+
+  const { dateRange, filter } = resolveDashboardDateRange(query);
+
+  const hasResearcherRole = member.roles.includes(WorkspaceRole.RESEARCHER);
+  const hasDesignerRole = member.roles.includes(WorkspaceRole.DESIGNER);
+  const hasListerRole = member.roles.includes(WorkspaceRole.LISTER);
+
+  // 2. Fetch summary aggregates and recent items in parallel
+  const researchPromise = hasResearcherRole
+    ? prisma.researchItem.count({
+        where: {
+          workspaceId,
+          createdById: userId,
+          ...(filter ? { createdAt: filter } : {}),
+        },
+      })
+    : Promise.resolve(null);
+
+  const designPromise = hasDesignerRole
+    ? Promise.all([
+        prisma.designAssignment.count({
+          where: {
+            designerId: userId,
+            researchItem: { workspaceId },
+            ...(filter ? { assignedAt: filter } : {}),
+          },
+        }),
+        prisma.designAssignment.count({
+          where: {
+            designerId: userId,
+            isCurrent: true,
+            researchItem: {
+              workspaceId,
+              status: ResearchStatus.DESIGN_IN_PROGRESS,
+            },
+          },
+        }),
+        prisma.reviewSubmission.count({
+          where: {
+            designerId: userId,
+            researchItem: { workspaceId },
+            ...(filter ? { submittedAt: filter } : {}),
+          },
+        }),
+        prisma.reviewSubmission.count({
+          where: {
+            designerId: userId,
+            researchItem: { workspaceId },
+            approvedAt: filter ? filter : { not: null },
+          },
+        }),
+        prisma.reviewSubmission.count({
+          where: {
+            designerId: userId,
+            researchItem: { workspaceId },
+            roundNumber: { gt: 1 },
+            ...(filter ? { submittedAt: filter } : {}),
+          },
+        }),
+        prisma.designAssignment.count({
+          where: {
+            designerId: userId,
+            researchItem: { workspaceId },
+            completedAt: filter ? filter : { not: null },
+          },
+        }),
+      ])
+    : Promise.resolve(null);
+
+  const listingPromise = hasListerRole
+    ? Promise.all([
+        prisma.listingAssignment.count({
+          where: {
+            listerId: userId,
+            researchItem: { workspaceId },
+            ...(filter ? { assignedAt: filter } : {}),
+          },
+        }),
+        prisma.listingAssignment.count({
+          where: {
+            listerId: userId,
+            isCurrent: true,
+            researchItem: {
+              workspaceId,
+              status: ResearchStatus.LISTING_IN_PROGRESS,
+            },
+          },
+        }),
+        prisma.listingResult.count({
+          where: {
+            listedById: userId,
+            researchItem: { workspaceId },
+            ...(filter ? { listedAt: filter } : {}),
+          },
+        }),
+      ])
+    : Promise.resolve(null);
+
+  const recentItemsPromise = prisma.researchItem.findMany({
+    where: {
+      workspaceId,
+      OR: [
+        { createdById: userId },
+        {
+          designAssignments: {
+            some: {
+              designerId: userId,
+              isCurrent: true,
+            },
+          },
+        },
+        {
+          listingAssignments: {
+            some: {
+              listerId: userId,
+              isCurrent: true,
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      updatedAt: true,
+      createdById: true,
+      designAssignments: {
+        where: {
+          designerId: userId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+        },
+      },
+      listingAssignments: {
+        where: {
+          listerId: userId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: 15,
+  });
+
+  const [researchCount, designMetrics, listingMetrics, rawRecentItems] =
+    await Promise.all([
+      researchPromise,
+      designPromise,
+      listingPromise,
+      recentItemsPromise,
+    ]);
+
+  const researchSummary: UserActivitySummaryResearch | null =
+    hasResearcherRole && researchCount !== null
+      ? {
+          totalCreated: researchCount,
+        }
+      : null;
+
+  const designSummary: UserActivitySummaryDesign | null =
+    hasDesignerRole && designMetrics !== null
+      ? {
+          assignedCount: designMetrics[0],
+          currentInProgress: designMetrics[1],
+          submittedCount: designMetrics[2],
+          approvedCount: designMetrics[3],
+          correctionsCount: designMetrics[4],
+          completedCount: designMetrics[5],
+        }
+      : null;
+
+  const listingSummary: UserActivitySummaryListing | null =
+    hasListerRole && listingMetrics !== null
+      ? {
+          assignedCount: listingMetrics[0],
+          currentInProgress: listingMetrics[1],
+          listedCount: listingMetrics[2],
+        }
+      : null;
+
+  const recentItems: UserActivityRecentItem[] = rawRecentItems.map((item) => {
+    let activityRole: UserActivityRecentItemRole;
+    if (item.listingAssignments.length > 0) {
+      activityRole = "LISTER";
+    } else if (item.designAssignments.length > 0) {
+      activityRole = "DESIGNER";
+    } else {
+      activityRole = "RESEARCHER";
+    }
+
+    return {
+      id: item.id,
+      title: item.title,
+      status: item.status,
+      activityRole,
+      updatedAt: item.updatedAt.toISOString(),
+    };
+  });
+
+  return {
+    dateRange,
+    user: {
+      id: member.user.id,
+      name: member.user.name,
+      email: member.user.email,
+      roles: member.roles,
+      joinedAt: member.createdAt.toISOString(),
+    },
+    summary: {
+      research: researchSummary,
+      design: designSummary,
+      listing: listingSummary,
+    },
+    recentItems,
   };
 };
