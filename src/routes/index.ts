@@ -3,6 +3,7 @@ import { HealthRoutes } from "../modules/health/health.route.js";
 import { AuthRoutes } from "../modules/auth/auth.route.js";
 import { WorkspaceRoutes } from "../modules/workspace/workspace.route.js";
 import { WorkspaceInviteRoutes } from "../modules/workspaceInvite/workspaceInvite.route.js";
+import { GoogleDriveCallbackRoutes } from "../modules/googleDrive/googleDrive.route.js";
 
 const router: Router = express.Router();
 
@@ -27,6 +28,10 @@ const moduleRoutes: ModuleRoute[] = [
   {
     path: "/workspace/invites",
     route: WorkspaceInviteRoutes,
+  },
+  {
+    path: "/google-drive",
+    route: GoogleDriveCallbackRoutes,
   },
 ];
 

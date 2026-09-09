@@ -8,6 +8,7 @@ import { createWorkspaceInvite } from "../workspaceInvite/workspaceInvite.contro
 import { ResearchRoutes } from "../research/research.route.js";
 import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
 import { ReviewRoutes, AnnotationRoutes } from "../review/review.route.js";
+import { GoogleDriveWorkspaceRoutes } from "../googleDrive/googleDrive.route.js";
 
 const router: Router = Router();
 
@@ -23,6 +24,7 @@ router.use("/:workspaceId/designer", DesignerRoutes);
 router.use("/:workspaceId/design", DesignRoutes);
 router.use("/:workspaceId/reviews", ReviewRoutes);
 router.use("/:workspaceId/annotations", AnnotationRoutes);
+router.use("/:workspaceId/google-drive", GoogleDriveWorkspaceRoutes);
 
 export const WorkspaceRoutes = router;
 export default router;
