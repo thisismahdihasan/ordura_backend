@@ -2,7 +2,6 @@ import { NextFunction, Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as listingService from "./listing.service.js";
-import { mapFinalAssetDownloadError } from "./listing.drive.js";
 import {
   backfillListingAssignmentsParamsSchema,
   getListerWorkQueueQuerySchema,
@@ -182,7 +181,7 @@ export const createDownloadFinalAssetHandler = (
       res.off("close", onResponseClose);
 
       if (!res.headersSent) {
-        next(mapFinalAssetDownloadError(error));
+        next(error);
         return;
       }
 

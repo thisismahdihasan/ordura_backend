@@ -11,9 +11,7 @@ import {
 import {
   DesignerWorkQueueItem,
   DesignerWorkQueueResult,
-  DriveUploadedFileMeta,
   FinalAssetIncomingFile,
-  FinalAssetStorageUploader,
   NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED,
   NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED,
   ReportDesignIssueResult,
@@ -30,11 +28,6 @@ import {
   deleteTemporaryReviewImage,
   uploadTemporaryReviewImage,
 } from "./designer.review-storage.js";
-import { decryptGoogleRefreshToken } from "../googleDrive/googleDrive.crypto.js";
-import {
-  defaultFinalAssetStorageUploader,
-  handleGoogleDriveError,
-} from "./designer.drive.js";
 import { assignLeastWorkloadLister } from "../listing/listing.assignment.js";
 
 export const safeDesignerWorkQueueSelect = {
@@ -748,13 +741,12 @@ export const startCorrection = async (
   );
 };
 
-// Handles uploading final production files directly to workspace Google Drive and persisting FinalAsset records.
+// Validates a final-asset upload request before R2 persistence is added in Phase R2B.
 export const uploadFinalAssets = async (
   workspaceId: string,
   researchItemId: string,
   designerId: string,
-  incomingFiles: FinalAssetIncomingFile[],
-  storageUploader: FinalAssetStorageUploader = defaultFinalAssetStorageUploader
+  incomingFiles: FinalAssetIncomingFile[]
 ): Promise<UploadFinalAssetsResult> => {
   // 1. Validate file inputs
   if (!incomingFiles || incomingFiles.length === 0) {
@@ -781,12 +773,6 @@ export const uploadFinalAssets = async (
     select: {
       id: true,
       status: true,
-      workspace: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
     },
   });
 
@@ -850,240 +836,11 @@ export const uploadFinalAssets = async (
     );
   }
 
-  // Verify workspace Google Drive connection
-  const driveConnection = await prisma.googleDriveConnection.findUnique({
-    where: { workspaceId },
-    select: {
-      id: true,
-      encryptedRefreshToken: true,
-      rootFolderId: true,
-    },
-  });
-
-  if (
-    !driveConnection ||
-    !driveConnection.encryptedRefreshToken ||
-    !driveConnection.rootFolderId
-  ) {
-    throw new ApiError(
-      409,
-      "Google Drive is not connected for this workspace."
-    );
-  }
-
-  // Decrypt refresh token in-memory only
-  const decryptedRefreshToken = decryptGoogleRefreshToken(
-    driveConnection.encryptedRefreshToken
+  // R2 persistence is intentionally wired in Phase R2B after this schema and client foundation.
+  throw new ApiError(
+    503,
+    "Final asset storage is temporarily unavailable while Cloudflare R2 integration is being completed."
   );
-
-  // Verify and safely recover workspace root folder if missing or trashed
-  let effectiveRootFolderId = driveConnection.rootFolderId;
-  let rootCheck;
-  try {
-    rootCheck = await storageUploader.verifyOrRecreateRootFolder({
-      rootFolderId: driveConnection.rootFolderId,
-      workspaceName: researchItem.workspace.name,
-      refreshToken: decryptedRefreshToken,
-    });
-  } catch (err: unknown) {
-    return handleGoogleDriveError(
-      err,
-      "Failed to verify or recreate workspace root folder in Google Drive"
-    );
-  }
-
-  if (rootCheck.recreated) {
-    await prisma.googleDriveConnection.update({
-      where: { workspaceId },
-      data: { rootFolderId: rootCheck.rootFolderId },
-    });
-    effectiveRootFolderId = rootCheck.rootFolderId;
-  }
-
-  // Create design-specific subfolder under workspace root
-  const designFolderName = `Design-${researchItemId}`;
-  let designFolderId: string;
-  try {
-    designFolderId = await storageUploader.createDesignFolder({
-      folderName: designFolderName,
-      parentFolderId: effectiveRootFolderId,
-      refreshToken: decryptedRefreshToken,
-    });
-  } catch (err: unknown) {
-    return handleGoogleDriveError(
-      err,
-      "Failed to create design folder in Google Drive"
-    );
-  }
-
-  // Upload incoming files into design folder
-  const uploadedDriveFiles: DriveUploadedFileMeta[] = [];
-
-  try {
-    for (const file of incomingFiles) {
-      const uploadedMeta = await storageUploader.uploadFileStream({
-        filePath: file.path,
-        fileName: file.originalname,
-        mimeType: file.mimetype,
-        parentFolderId: designFolderId,
-        refreshToken: decryptedRefreshToken,
-      });
-      uploadedDriveFiles.push(uploadedMeta);
-    }
-  } catch (uploadError: unknown) {
-    // Partial Drive upload failure cleanup: remove uploaded files and newly created folder
-    for (const uploaded of uploadedDriveFiles) {
-      try {
-        await storageUploader.deleteFileOrFolder({
-          fileId: uploaded.driveFileId,
-          refreshToken: decryptedRefreshToken,
-        });
-      } catch {
-        // Preserves original error without masking
-      }
-    }
-
-    try {
-      await storageUploader.deleteFileOrFolder({
-        fileId: designFolderId,
-        refreshToken: decryptedRefreshToken,
-      });
-    } catch {
-      // Preserves original error without masking
-    }
-
-    return handleGoogleDriveError(
-      uploadError,
-      "Failed to upload file to Google Drive"
-    );
-  }
-
-  // Atomic database transaction with row-level lock protecting concurrent double upload
-  let createdFinalAssets: Array<{
-    id: string;
-    fileName: string;
-    fileSize: bigint;
-    mimeType: string;
-  }>;
-
-  try {
-    createdFinalAssets = await prisma.$transaction(
-      async (tx) => {
-        // Row-level lock on ResearchItem serializes any concurrent final asset commit
-        await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
-
-        // Re-verify source status
-        const itemInTx = await tx.researchItem.findFirst({
-          where: { id: researchItemId, workspaceId },
-          select: { status: true },
-        });
-
-        if (!itemInTx || itemInTx.status !== ResearchStatus.DESIGN_APPROVED) {
-          throw new ApiError(
-            409,
-            `Cannot upload final assets for research item with status ${itemInTx?.status}`
-          );
-        }
-
-        // Re-verify FinalAsset count under transaction lock
-        const countInTx = await tx.finalAsset.count({
-          where: { researchItemId },
-        });
-
-        if (countInTx > 0) {
-          throw new ApiError(
-            409,
-            "Final assets have already been uploaded for this design."
-          );
-        }
-
-        // Re-verify current designer assignment
-        const assignmentInTx = await tx.designAssignment.findFirst({
-          where: {
-            researchItemId,
-            designerId,
-            isCurrent: true,
-          },
-          select: { id: true },
-        });
-
-        if (!assignmentInTx) {
-          throw new ApiError(403, "You are not assigned to this research item");
-        }
-
-        // Insert FinalAsset records in the single atomic transaction
-        const inserted: Array<{
-          id: string;
-          fileName: string;
-          fileSize: bigint;
-          mimeType: string;
-        }> = [];
-
-        for (const fileMeta of uploadedDriveFiles) {
-          const created = await tx.finalAsset.create({
-            data: {
-              researchItemId,
-              uploadedById: designerId,
-              driveFileId: fileMeta.driveFileId,
-              fileName: fileMeta.fileName,
-              fileSize: fileMeta.fileSize,
-              mimeType: fileMeta.mimeType,
-            },
-            select: {
-              id: true,
-              fileName: true,
-              fileSize: true,
-              mimeType: true,
-            },
-          });
-          inserted.push(created);
-        }
-
-        return inserted;
-      },
-      {
-        maxWait: 10000,
-        timeout: 15000,
-      }
-    );
-  } catch (dbError) {
-    // DB failure / concurrency conflict cleanup: delete Drive files and folder created by this request
-    for (const uploaded of uploadedDriveFiles) {
-      try {
-        await storageUploader.deleteFileOrFolder({
-          fileId: uploaded.driveFileId,
-          refreshToken: decryptedRefreshToken,
-        });
-      } catch {
-        // Preserves original error without masking
-      }
-    }
-
-    try {
-      await storageUploader.deleteFileOrFolder({
-        fileId: designFolderId,
-        refreshToken: decryptedRefreshToken,
-      });
-    } catch {
-      // Preserves original error without masking
-    }
-
-    throw dbError;
-  }
-
-  // Response: status remains DESIGN_APPROVED; fileSize converted to string for BigInt safety
-  return {
-    researchItem: {
-      id: researchItemId,
-      status: ResearchStatus.DESIGN_APPROVED,
-    },
-    finalAssets: createdFinalAssets.map((asset) => ({
-      id: asset.id,
-      fileName: asset.fileName,
-      fileSize: asset.fileSize.toString(),
-      mimeType: asset.mimeType,
-    })),
-  };
 };
 
 // Atomically completes the designer workflow after final assets are uploaded, transitioning status to READY_FOR_LISTING.

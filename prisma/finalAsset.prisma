@@ -1,7 +1,7 @@
 model FinalAsset {
   id             String   @id @default(cuid())
   researchItemId String
-  driveFileId    String   @unique
+  storageKey     String   @unique
   fileName       String
   fileSize       BigInt
   mimeType       String

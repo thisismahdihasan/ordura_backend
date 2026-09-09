@@ -112,37 +112,6 @@ export type FinalAssetIncomingFile = {
   size: number;
 };
 
-export type DriveUploadedFileMeta = {
-  driveFileId: string;
-  fileName: string;
-  fileSize: bigint;
-  mimeType: string;
-};
-
-export type FinalAssetStorageUploader = {
-  verifyOrRecreateRootFolder: (params: {
-    rootFolderId: string;
-    workspaceName: string;
-    refreshToken: string;
-  }) => Promise<{ rootFolderId: string; recreated: boolean }>;
-  createDesignFolder: (params: {
-    folderName: string;
-    parentFolderId: string;
-    refreshToken: string;
-  }) => Promise<string>;
-  uploadFileStream: (params: {
-    filePath: string;
-    fileName: string;
-    mimeType: string;
-    parentFolderId: string;
-    refreshToken: string;
-  }) => Promise<DriveUploadedFileMeta>;
-  deleteFileOrFolder: (params: {
-    fileId: string;
-    refreshToken: string;
-  }) => Promise<void>;
-};
-
 export type CompleteDesignResult = {
   researchItem: {
     id: string;

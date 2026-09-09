@@ -1,15 +1,12 @@
 import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
-import { decryptGoogleRefreshToken } from "../googleDrive/googleDrive.crypto.js";
 import { extractEtsyListing } from "../research/research.helper.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
-import { defaultFinalAssetDownloader } from "./listing.drive.js";
 import {
   BackfillListingResult,
   CompleteListingResult,
   FinalAssetDownloadDescriptor,
-  FinalAssetDownloader,
   ListerWorkQueueItem,
   ListerWorkQueueResult,
   StartListingResult,
@@ -349,8 +346,7 @@ export const getAuthorizedFinalAssetDownload = async (
   workspaceId: string,
   assetId: string,
   userId: string,
-  userRoles: readonly WorkspaceRole[],
-  downloader: FinalAssetDownloader = defaultFinalAssetDownloader
+  userRoles: readonly WorkspaceRole[]
 ): Promise<FinalAssetDownloadDescriptor> => {
   const asset = await prisma.finalAsset.findFirst({
     where: {
@@ -361,7 +357,6 @@ export const getAuthorizedFinalAssetDownload = async (
     },
     select: {
       id: true,
-      driveFileId: true,
       fileName: true,
       fileSize: true,
       mimeType: true,
@@ -408,31 +403,11 @@ export const getAuthorizedFinalAssetDownload = async (
     }
   }
 
-  const connection = await prisma.googleDriveConnection.findUnique({
-    where: { workspaceId },
-    select: {
-      encryptedRefreshToken: true,
-    },
-  });
-
-  if (!connection?.encryptedRefreshToken) {
-    throw new ApiError(409, "Google Drive is not connected for this workspace.");
-  }
-
-  const refreshToken = decryptGoogleRefreshToken(
-    connection.encryptedRefreshToken
+  // R2 streaming is intentionally wired in Phase R2B after this schema and client foundation.
+  throw new ApiError(
+    503,
+    "Final asset storage is temporarily unavailable while Cloudflare R2 integration is being completed."
   );
-  const stream = await downloader.getDownloadStream({
-    driveFileId: asset.driveFileId,
-    refreshToken,
-  });
-
-  return {
-    fileName: asset.fileName,
-    fileSize: asset.fileSize,
-    mimeType: asset.mimeType,
-    stream,
-  };
 };
 
 // Atomically completes listing work, preserves assignment history, and creates the sole listing result.

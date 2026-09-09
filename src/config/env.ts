@@ -28,10 +28,10 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().trim().optional(),
   CLOUDINARY_API_KEY: z.string().trim().optional(),
   CLOUDINARY_API_SECRET: z.string().trim().optional(),
-  GOOGLE_CLIENT_ID: z.string().trim().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().trim().optional(),
-  GOOGLE_REDIRECT_URI: z.string().trim().optional(),
-  GOOGLE_TOKEN_ENCRYPTION_KEY: z.string().trim().optional(),
+  R2_ACCESS_KEY_ID: z.string().trim().min(1, "R2_ACCESS_KEY_ID is required"),
+  R2_SECRET_ACCESS_KEY: z.string().trim().min(1, "R2_SECRET_ACCESS_KEY is required"),
+  R2_BUCKET_NAME: z.string().trim().min(1, "R2_BUCKET_NAME is required"),
+  R2_ENDPOINT: z.string().trim().url("R2_ENDPOINT must be a valid URL"),
   CRON_SECRET: z
     .string()
     .trim()
@@ -91,95 +91,21 @@ const envSchema = z.object({
     }
   }
 
-  // Google Drive configuration validation
-  const hasGoogleClientId = Boolean(data.GOOGLE_CLIENT_ID && data.GOOGLE_CLIENT_ID.trim().length > 0);
-  const hasGoogleClientSecret = Boolean(data.GOOGLE_CLIENT_SECRET && data.GOOGLE_CLIENT_SECRET.trim().length > 0);
-  const hasGoogleRedirectUri = Boolean(data.GOOGLE_REDIRECT_URI && data.GOOGLE_REDIRECT_URI.trim().length > 0);
-  const hasGoogleEncryptionKey = Boolean(data.GOOGLE_TOKEN_ENCRYPTION_KEY && data.GOOGLE_TOKEN_ENCRYPTION_KEY.trim().length > 0);
-
-  const anyGoogleProvided = hasGoogleClientId || hasGoogleClientSecret || hasGoogleRedirectUri || hasGoogleEncryptionKey;
-  const allGoogleProvided = hasGoogleClientId && hasGoogleClientSecret && hasGoogleRedirectUri && hasGoogleEncryptionKey;
-
   if (data.NODE_ENV === "production") {
-    if (!hasGoogleClientId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_CLIENT_ID is required in production",
-        path: ["GOOGLE_CLIENT_ID"],
-      });
-    }
-    if (!hasGoogleClientSecret) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_CLIENT_SECRET is required in production",
-        path: ["GOOGLE_CLIENT_SECRET"],
-      });
-    }
-    if (!hasGoogleRedirectUri) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_REDIRECT_URI is required in production",
-        path: ["GOOGLE_REDIRECT_URI"],
-      });
-    }
-    if (!hasGoogleEncryptionKey) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_TOKEN_ENCRYPTION_KEY is required in production",
-        path: ["GOOGLE_TOKEN_ENCRYPTION_KEY"],
-      });
-    }
-  } else if (anyGoogleProvided && !allGoogleProvided) {
-    if (!hasGoogleClientId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_CLIENT_ID is required when Google Drive configuration is provided",
-        path: ["GOOGLE_CLIENT_ID"],
-      });
-    }
-    if (!hasGoogleClientSecret) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_CLIENT_SECRET is required when Google Drive configuration is provided",
-        path: ["GOOGLE_CLIENT_SECRET"],
-      });
-    }
-    if (!hasGoogleRedirectUri) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_REDIRECT_URI is required when Google Drive configuration is provided",
-        path: ["GOOGLE_REDIRECT_URI"],
-      });
-    }
-    if (!hasGoogleEncryptionKey) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_TOKEN_ENCRYPTION_KEY is required when Google Drive configuration is provided",
-        path: ["GOOGLE_TOKEN_ENCRYPTION_KEY"],
-      });
-    }
-  }
-
-  // If redirect URI is provided, validate URL format
-  if (hasGoogleRedirectUri && data.GOOGLE_REDIRECT_URI) {
     try {
-      new URL(data.GOOGLE_REDIRECT_URI);
+      const endpoint = new URL(data.R2_ENDPOINT);
+      if (endpoint.protocol !== "https:") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "R2_ENDPOINT must use HTTPS in production",
+          path: ["R2_ENDPOINT"],
+        });
+      }
     } catch {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "GOOGLE_REDIRECT_URI must be a valid URL",
-        path: ["GOOGLE_REDIRECT_URI"],
-      });
-    }
-  }
-
-  // If encryption key is provided, validate 64-character hexadecimal format (32 bytes for AES-256)
-  if (hasGoogleEncryptionKey && data.GOOGLE_TOKEN_ENCRYPTION_KEY) {
-    if (!/^[0-9a-fA-F]{64}$/.test(data.GOOGLE_TOKEN_ENCRYPTION_KEY)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "GOOGLE_TOKEN_ENCRYPTION_KEY must be exactly 64 hexadecimal characters (32 bytes)",
-        path: ["GOOGLE_TOKEN_ENCRYPTION_KEY"],
+        message: "R2_ENDPOINT must be a valid URL",
+        path: ["R2_ENDPOINT"],
       });
     }
   }

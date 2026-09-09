@@ -17,6 +17,7 @@
     "schema": "prisma"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1128.0",
     "@prisma/client": "^6.19.3",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.11.0",
@@ -25,7 +26,6 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
-    "googleapis": "^178.0.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.3.0",

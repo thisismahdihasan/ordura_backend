@@ -89,13 +89,6 @@ export type FinalAssetDownloadDescriptor = {
   stream: Readable;
 };
 
-export type FinalAssetDownloader = {
-  getDownloadStream: (params: {
-    driveFileId: string;
-    refreshToken: string;
-  }) => Promise<Readable>;
-};
-
 export type CompleteListingResult = {
   researchItem: {
     id: string;

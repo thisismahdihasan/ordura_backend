@@ -21,5 +21,4 @@ model User {
   listingAssignments       ListingAssignment[]
   listingResults           ListingResult[]
   notifications            Notification[]
-  googleDriveConnections   GoogleDriveConnection[] @relation("GoogleDriveConnectedBy")
 }

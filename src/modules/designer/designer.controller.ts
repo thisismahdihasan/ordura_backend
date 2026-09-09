@@ -163,7 +163,7 @@ export const startCorrection = async (
   });
 };
 
-// Handles HTTP request for uploading final production files directly to workspace Google Drive.
+// Handles HTTP request for uploading final production files to Ordura's configured storage provider.
 export const uploadFinalAssets = async (
   req: Request,
   res: Response
