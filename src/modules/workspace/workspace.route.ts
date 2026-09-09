@@ -10,6 +10,7 @@ import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
 import { ReviewRoutes, AnnotationRoutes } from "../review/review.route.js";
 import { GoogleDriveWorkspaceRoutes } from "../googleDrive/googleDrive.route.js";
 import { ListerRoutes, ListingRoutes } from "../listing/listing.route.js";
+import { DashboardRoutes } from "../dashboard/dashboard.route.js";
 
 const router: Router = Router();
 
@@ -28,6 +29,7 @@ router.use("/:workspaceId/annotations", AnnotationRoutes);
 router.use("/:workspaceId/google-drive", GoogleDriveWorkspaceRoutes);
 router.use("/:workspaceId/lister", ListerRoutes);
 router.use("/:workspaceId/listing", ListingRoutes);
+router.use("/:workspaceId/admin", DashboardRoutes);
 
 export const WorkspaceRoutes = router;
 export default router;
