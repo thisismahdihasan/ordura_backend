@@ -5,6 +5,7 @@ import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   backfillListingAssignments,
+  downloadFinalAsset,
   getListerWorkQueue,
   startListing,
 } from "./listing.controller.js";
@@ -19,6 +20,13 @@ listerRouter.get(
 );
 
 const listingRouter: Router = Router({ mergeParams: true });
+
+listingRouter.get(
+  "/assets/:assetId/download",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.LISTER),
+  catchAsync(downloadFinalAsset)
+);
 
 listingRouter.post(
   "/:researchItemId/start",

@@ -1,9 +1,13 @@
-import { Prisma, ResearchStatus } from "@prisma/client";
+import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
+import { decryptGoogleRefreshToken } from "../googleDrive/googleDrive.crypto.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
+import { defaultFinalAssetDownloader } from "./listing.drive.js";
 import {
   BackfillListingResult,
+  FinalAssetDownloadDescriptor,
+  FinalAssetDownloader,
   ListerWorkQueueItem,
   ListerWorkQueueResult,
   StartListingResult,
@@ -12,6 +16,17 @@ import {
   GetListerWorkQueueQueryInput,
   LISTER_QUEUE_ACTIVE_STATUSES,
 } from "./listing.validation.js";
+
+const LISTER_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
+  ResearchStatus.READY_FOR_LISTING,
+  ResearchStatus.LISTING_IN_PROGRESS,
+  ResearchStatus.LISTED,
+]);
+
+const ADMIN_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
+  ResearchStatus.DESIGN_APPROVED,
+  ...LISTER_DOWNLOAD_STATUSES,
+]);
 
 export const safeListerWorkQueueSelect = {
   id: true,
@@ -326,3 +341,93 @@ export const startListingWork = async (
   );
 };
 
+// Resolves an authorized final-asset media stream without exposing Drive identifiers or credentials.
+export const getAuthorizedFinalAssetDownload = async (
+  workspaceId: string,
+  assetId: string,
+  userId: string,
+  userRoles: readonly WorkspaceRole[],
+  downloader: FinalAssetDownloader = defaultFinalAssetDownloader
+): Promise<FinalAssetDownloadDescriptor> => {
+  const asset = await prisma.finalAsset.findFirst({
+    where: {
+      id: assetId,
+      researchItem: {
+        workspaceId,
+      },
+    },
+    select: {
+      id: true,
+      driveFileId: true,
+      fileName: true,
+      fileSize: true,
+      mimeType: true,
+      researchItemId: true,
+      researchItem: {
+        select: {
+          id: true,
+          workspaceId: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (!asset) {
+    throw new ApiError(404, "Final asset not found");
+  }
+
+  const isAdmin = userRoles.includes(WorkspaceRole.ADMIN);
+  const allowedStatuses = isAdmin
+    ? ADMIN_DOWNLOAD_STATUSES
+    : LISTER_DOWNLOAD_STATUSES;
+
+  if (!allowedStatuses.has(asset.researchItem.status)) {
+    throw new ApiError(409, "Final asset is not available at this workflow stage.");
+  }
+
+  if (!isAdmin) {
+    const currentAssignment = await prisma.listingAssignment.findFirst({
+      where: {
+        researchItemId: asset.researchItemId,
+        listerId: userId,
+        isCurrent: true,
+      },
+      select: {
+        id: true,
+        listerId: true,
+        isCurrent: true,
+      },
+    });
+
+    if (!currentAssignment) {
+      throw new ApiError(403, "You are not assigned to this research item");
+    }
+  }
+
+  const connection = await prisma.googleDriveConnection.findUnique({
+    where: { workspaceId },
+    select: {
+      encryptedRefreshToken: true,
+    },
+  });
+
+  if (!connection?.encryptedRefreshToken) {
+    throw new ApiError(409, "Google Drive is not connected for this workspace.");
+  }
+
+  const refreshToken = decryptGoogleRefreshToken(
+    connection.encryptedRefreshToken
+  );
+  const stream = await downloader.getDownloadStream({
+    driveFileId: asset.driveFileId,
+    refreshToken,
+  });
+
+  return {
+    fileName: asset.fileName,
+    fileSize: asset.fileSize,
+    mimeType: asset.mimeType,
+    stream,
+  };
+};

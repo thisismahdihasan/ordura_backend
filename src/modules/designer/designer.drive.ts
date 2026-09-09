@@ -23,12 +23,20 @@ export const isGoogleAuthError = (err: unknown): boolean => {
     "data" in err.response
       ? (err.response as { data: unknown }).data
       : undefined;
+  const responseStatus =
+    "response" in err &&
+    err.response &&
+    typeof err.response === "object" &&
+    "status" in err.response
+      ? (err.response as { status?: unknown }).status
+      : undefined;
   const errStr = `${JSON.stringify(respData ?? "")} ${msg}`.toLowerCase();
   return (
     errStr.includes("invalid_grant") ||
     errStr.includes("invalid_token") ||
     errStr.includes("invalid credentials") ||
-    code === 401
+    code === 401 ||
+    responseStatus === 401
   );
 };
 

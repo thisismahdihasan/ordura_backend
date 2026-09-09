@@ -1,13 +1,46 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as listingService from "./listing.service.js";
+import { mapFinalAssetDownloadError } from "./listing.drive.js";
 import {
   backfillListingAssignmentsParamsSchema,
   getListerWorkQueueQuerySchema,
   startListingBodySchema,
   startListingParamsSchema,
+  downloadFinalAssetParamsSchema,
 } from "./listing.validation.js";
+
+const safeDownloadContentType = (mimeType: string): string => {
+  const normalized = mimeType.trim().toLowerCase();
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(normalized)
+    ? normalized
+    : "application/octet-stream";
+};
+
+const safeDownloadFileName = (fileName: string): string => {
+  const cleaned = fileName
+    .normalize("NFC")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .trim();
+
+  return cleaned || "download";
+};
+
+const contentDispositionForFileName = (fileName: string): string => {
+  const safeFileName = safeDownloadFileName(fileName);
+  const asciiFallback = safeFileName
+    .replace(/[^A-Za-z0-9._ -]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim() || "download";
+  const encodedFileName = encodeURIComponent(safeFileName).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFileName}`;
+};
 
 // Handles HTTP request for fetching the authenticated lister's active work queue.
 export const getListerWorkQueue = async (
@@ -77,3 +110,75 @@ export const startListing = async (
   });
 };
 
+type FinalAssetDownloadResolver =
+  typeof listingService.getAuthorizedFinalAssetDownload;
+
+// Builds the HTTP stream handler with an explicit resolver seam for deterministic provider-free tests.
+export const createDownloadFinalAssetHandler = (
+  resolveDownload: FinalAssetDownloadResolver =
+    listingService.getAuthorizedFinalAssetDownload
+) => {
+  return async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    const authReq = req as WorkspaceAuthorizedRequest;
+    const { workspaceId, assetId } = downloadFinalAssetParamsSchema.parse(
+      req.params
+    );
+    const download = await resolveDownload(
+      workspaceId,
+      assetId,
+      authReq.user.id,
+      authReq.workspaceMembership.roles
+    );
+
+    const stopUpstream = (): void => {
+      if (!download.stream.destroyed) {
+        download.stream.destroy();
+      }
+    };
+
+    const onClientAbort = (): void => {
+      stopUpstream();
+    };
+
+    const onResponseClose = (): void => {
+      if (!res.writableEnded) {
+        stopUpstream();
+      }
+    };
+
+    const onStreamError = (error: Error): void => {
+      req.off("aborted", onClientAbort);
+      res.off("close", onResponseClose);
+
+      if (!res.headersSent) {
+        next(mapFinalAssetDownloadError(error));
+        return;
+      }
+
+      res.destroy();
+    };
+
+    req.once("aborted", onClientAbort);
+    res.once("close", onResponseClose);
+    download.stream.once("error", onStreamError);
+
+    res.status(200);
+    res.setHeader("Content-Type", safeDownloadContentType(download.mimeType));
+    if (download.fileSize >= 0n) {
+      res.setHeader("Content-Length", download.fileSize.toString());
+    }
+    res.setHeader(
+      "Content-Disposition",
+      contentDispositionForFileName(download.fileName)
+    );
+
+    download.stream.pipe(res);
+  };
+};
+
+// Streams an authorized final asset to the caller without buffering its bytes in application memory.
+export const downloadFinalAsset = createDownloadFinalAssetHandler();

@@ -1,4 +1,5 @@
 import { ResearchStatus } from "@prisma/client";
+import { Readable } from "node:stream";
 
 export const NOTIFICATION_TYPE_LISTING_ASSIGNED = "LISTING_ASSIGNED" as const;
 
@@ -81,3 +82,16 @@ export type StartListingResult = {
   };
 };
 
+export type FinalAssetDownloadDescriptor = {
+  fileName: string;
+  fileSize: bigint;
+  mimeType: string;
+  stream: Readable;
+};
+
+export type FinalAssetDownloader = {
+  getDownloadStream: (params: {
+    driveFileId: string;
+    refreshToken: string;
+  }) => Promise<Readable>;
+};

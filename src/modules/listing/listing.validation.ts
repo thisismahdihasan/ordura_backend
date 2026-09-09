@@ -80,3 +80,13 @@ export type StartListingBodyInput = z.infer<
   typeof startListingBodySchema
 >;
 
+export const downloadFinalAssetParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    assetId: z.string().trim().min(1, "assetId is required"),
+  })
+  .strict();
+
+export type DownloadFinalAssetParamsInput = z.infer<
+  typeof downloadFinalAssetParamsSchema
+>;
