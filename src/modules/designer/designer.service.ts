@@ -35,6 +35,7 @@ import {
   defaultFinalAssetStorageUploader,
   handleGoogleDriveError,
 } from "./designer.drive.js";
+import { assignLeastWorkloadLister } from "../listing/listing.assignment.js";
 
 export const safeDesignerWorkQueueSelect = {
   id: true,
@@ -1208,6 +1209,9 @@ export const completeDesignWork = async (
           completedAt = now;
         }
       }
+
+      // 9. Auto-assign least-workload lister if eligible lister exists in workspace
+      await assignLeastWorkloadLister(tx, workspaceId, researchItemId);
 
       return {
         researchItem: {
