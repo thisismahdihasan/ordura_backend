@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiError } from "../../shared/ApiError.js";
@@ -7,6 +8,7 @@ import {
   ReviewImageDestroyer,
   ReviewImageUploader,
 } from "./designer.review-storage.js";
+import { FinalAssetIncomingFile } from "./designer.type.js";
 import {
   getDesignerWorkQueueQuerySchema,
   reportDesignIssueBodySchema,
@@ -16,6 +18,7 @@ import {
   startDesignWorkParamsSchema,
   submitDesignReviewBodySchema,
   submitDesignReviewParamsSchema,
+  uploadFinalAssetsParamsSchema,
 } from "./designer.validation.js";
 
 // Handles HTTP request for fetching the authenticated designer's active work queue.
@@ -158,5 +161,51 @@ export const startCorrection = async (
   });
 };
 
+// Handles HTTP request for uploading final production files directly to workspace Google Drive.
+export const uploadFinalAssets = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = uploadFinalAssetsParamsSchema.parse(
+    req.params
+  );
 
+  const rawFiles = req.files as Express.Multer.File[] | undefined;
+  if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length === 0) {
+    throw new ApiError(400, "At least one final asset file is required");
+  }
 
+  const incomingFiles: FinalAssetIncomingFile[] = rawFiles.map((f) => ({
+    path: f.path,
+    originalname: f.originalname,
+    mimetype: f.mimetype,
+    size: f.size,
+  }));
+
+  try {
+    const result = await designerService.uploadFinalAssets(
+      workspaceId,
+      researchItemId,
+      authReq.user.id,
+      incomingFiles
+    );
+
+    ApiResponse.success(res, {
+      statusCode: 200,
+      message: "Final assets uploaded successfully",
+      data: result,
+    });
+  } finally {
+    // Defensively unlink all temporary files regardless of success or failure
+    for (const f of rawFiles) {
+      if (f.path) {
+        try {
+          await fs.promises.unlink(f.path);
+        } catch {
+          // Ignore if already unlinked or cleaned
+        }
+      }
+    }
+  }
+};

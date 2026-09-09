@@ -1,5 +1,7 @@
+import path from "node:path";
 import { z } from "zod";
 import { ResearchStatus } from "@prisma/client";
+import { ApiError } from "../../shared/ApiError.js";
 
 export const DESIGNER_QUEUE_ACTIVE_STATUSES = [
   ResearchStatus.ASSIGNED,
@@ -145,4 +147,124 @@ export type StartCorrectionBodyInput = z.infer<
   typeof startCorrectionBodySchema
 >;
 
+export const uploadFinalAssetsParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
 
+export type UploadFinalAssetsParamsInput = z.infer<
+  typeof uploadFinalAssetsParamsSchema
+>;
+
+export const MAX_FINAL_ASSET_FILES = 10;
+export const MAX_FINAL_ASSET_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
+
+export const ALLOWED_FINAL_ASSET_EXTENSIONS = [
+  ".zip",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".pdf",
+] as const;
+
+export type AllowedFinalAssetExtension =
+  (typeof ALLOWED_FINAL_ASSET_EXTENSIONS)[number];
+
+export const ALLOWED_FINAL_ASSET_MIMETYPES = [
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/octet-stream",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/pdf",
+] as const;
+
+export type AllowedFinalAssetMimeType =
+  (typeof ALLOWED_FINAL_ASSET_MIMETYPES)[number];
+
+export const EXTENSION_MIME_MAP: Record<
+  AllowedFinalAssetExtension,
+  readonly string[]
+> = {
+  ".zip": [
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/octet-stream",
+  ],
+  ".png": ["image/png"],
+  ".jpg": ["image/jpeg"],
+  ".jpeg": ["image/jpeg"],
+  ".webp": ["image/webp"],
+  ".pdf": ["application/pdf"],
+};
+
+// Sanitizes final asset filenames: strips path traversal and control characters, verifies non-empty.
+export const sanitizeFinalAssetFileName = (rawName: string): string => {
+  if (!rawName || typeof rawName !== "string") {
+    throw new ApiError(400, "File name cannot be empty");
+  }
+
+  const trimmed = rawName.trim();
+  const baseName = path.basename(trimmed);
+  const cleaned = baseName.replace(/[\x00-\x1F\x7F]/g, "").trim();
+
+  if (
+    cleaned.length === 0 ||
+    cleaned === "." ||
+    cleaned === ".." ||
+    cleaned === "/" ||
+    cleaned === "\\"
+  ) {
+    throw new ApiError(400, "Invalid file name");
+  }
+
+  return cleaned;
+};
+
+// Validates that a file has an allowed extension, matching MIME type, and safe size.
+export const validateFinalAssetFile = (file: {
+  originalname: string;
+  mimetype: string;
+  size?: number;
+}): {
+  sanitizedName: string;
+  extension: AllowedFinalAssetExtension;
+  mimeType: string;
+} => {
+  const sanitizedName = sanitizeFinalAssetFileName(file.originalname);
+  const ext = path.extname(sanitizedName).toLowerCase() as AllowedFinalAssetExtension;
+
+  if (!ALLOWED_FINAL_ASSET_EXTENSIONS.includes(ext)) {
+    throw new ApiError(
+      400,
+      `Unsupported file type "${ext}". Allowed types: .zip, .png, .jpg, .jpeg, .webp, .pdf`
+    );
+  }
+
+  const normalizedMime = file.mimetype.trim().toLowerCase();
+  const allowedMimesForExt = EXTENSION_MIME_MAP[ext];
+
+  if (!allowedMimesForExt || !allowedMimesForExt.includes(normalizedMime)) {
+    throw new ApiError(
+      400,
+      `Invalid MIME type "${normalizedMime}" for file "${sanitizedName}". Expected one of: ${allowedMimesForExt.join(", ")}`
+    );
+  }
+
+  if (file.size !== undefined && file.size > MAX_FINAL_ASSET_FILE_SIZE_BYTES) {
+    throw new ApiError(
+      400,
+      `File "${sanitizedName}" exceeds maximum limit of 100MB per file`
+    );
+  }
+
+  return {
+    sanitizedName,
+    extension: ext,
+    mimeType: normalizedMime,
+  };
+};
