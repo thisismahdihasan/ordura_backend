@@ -3,6 +3,7 @@ import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "../research/research.helper.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
+import { getObjectStream } from "../storage/r2.js";
 import {
   BackfillListingResult,
   CompleteListingResult,
@@ -341,7 +342,7 @@ export const startListingWork = async (
   );
 };
 
-// Resolves an authorized final-asset media stream without exposing Drive identifiers or credentials.
+// Resolves an authorized final-asset media stream without exposing storage identifiers or credentials.
 export const getAuthorizedFinalAssetDownload = async (
   workspaceId: string,
   assetId: string,
@@ -360,6 +361,7 @@ export const getAuthorizedFinalAssetDownload = async (
       fileName: true,
       fileSize: true,
       mimeType: true,
+      storageKey: true,
       researchItemId: true,
       researchItem: {
         select: {
@@ -403,11 +405,14 @@ export const getAuthorizedFinalAssetDownload = async (
     }
   }
 
-  // R2 streaming is intentionally wired in Phase R2B after this schema and client foundation.
-  throw new ApiError(
-    503,
-    "Final asset storage is temporarily unavailable while Cloudflare R2 integration is being completed."
-  );
+  const stream = await getObjectStream(asset.storageKey);
+
+  return {
+    fileName: asset.fileName,
+    fileSize: asset.fileSize,
+    mimeType: asset.mimeType,
+    stream,
+  };
 };
 
 // Atomically completes listing work, preserves assignment history, and creates the sole listing result.

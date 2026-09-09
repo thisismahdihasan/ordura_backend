@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
@@ -29,6 +30,42 @@ import {
   uploadTemporaryReviewImage,
 } from "./designer.review-storage.js";
 import { assignLeastWorkloadLister } from "../listing/listing.assignment.js";
+import {
+  buildFinalAssetKey,
+  deleteObject,
+  uploadObject,
+  UploadObjectInput,
+} from "../storage/r2.js";
+
+type FinalAssetStorageOperations = {
+  upload: (input: UploadObjectInput) => Promise<void>;
+  remove: (storageKey: string) => Promise<void>;
+};
+
+const r2FinalAssetStorage: FinalAssetStorageOperations = {
+  upload: uploadObject,
+  remove: deleteObject,
+};
+
+type UploadedFinalAsset = {
+  storageKey: string;
+  fileName: string;
+  fileSize: bigint;
+  mimeType: string;
+};
+
+const rollbackUploadedFinalAssets = async (
+  uploadedAssets: readonly UploadedFinalAsset[],
+  removeObject: FinalAssetStorageOperations["remove"]
+): Promise<void> => {
+  for (const asset of uploadedAssets) {
+    try {
+      await removeObject(asset.storageKey);
+    } catch {
+      console.error("Failed to remove uploaded final asset during rollback");
+    }
+  }
+};
 
 export const safeDesignerWorkQueueSelect = {
   id: true,
@@ -741,12 +778,13 @@ export const startCorrection = async (
   );
 };
 
-// Validates a final-asset upload request before R2 persistence is added in Phase R2B.
+// Uploads validated final assets to private R2 storage before persisting their internal object keys.
 export const uploadFinalAssets = async (
   workspaceId: string,
   researchItemId: string,
   designerId: string,
-  incomingFiles: FinalAssetIncomingFile[]
+  incomingFiles: FinalAssetIncomingFile[],
+  storage: FinalAssetStorageOperations = r2FinalAssetStorage
 ): Promise<UploadFinalAssetsResult> => {
   // 1. Validate file inputs
   if (!incomingFiles || incomingFiles.length === 0) {
@@ -836,11 +874,156 @@ export const uploadFinalAssets = async (
     );
   }
 
-  // R2 persistence is intentionally wired in Phase R2B after this schema and client foundation.
-  throw new ApiError(
-    503,
-    "Final asset storage is temporarily unavailable while Cloudflare R2 integration is being completed."
-  );
+  const uploadedAssets: UploadedFinalAsset[] = [];
+
+  try {
+    for (const file of incomingFiles) {
+      const validatedFile = validateFinalAssetFile(file);
+      const fileName = validatedFile.sanitizedName;
+      const storageKey = buildFinalAssetKey({
+        workspaceId,
+        researchItemId,
+        fileName,
+      });
+
+      await storage.upload({
+        storageKey,
+        body: fs.createReadStream(file.path),
+        mimeType: validatedFile.mimeType,
+        contentLength: file.size,
+      });
+
+      uploadedAssets.push({
+        storageKey,
+        fileName,
+        fileSize: BigInt(file.size),
+        mimeType: validatedFile.mimeType,
+      });
+    }
+  } catch {
+    await rollbackUploadedFinalAssets(uploadedAssets, storage.remove);
+    throw new ApiError(502, "Failed to upload final asset to storage.");
+  }
+
+  try {
+    const finalAssets = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
+
+        const currentResearchItem = await tx.researchItem.findFirst({
+          where: {
+            id: researchItemId,
+            workspaceId,
+          },
+          select: {
+            id: true,
+            status: true,
+          },
+        });
+
+        if (!currentResearchItem) {
+          throw new ApiError(404, "Research item not found");
+        }
+
+        if (currentResearchItem.status !== ResearchStatus.DESIGN_APPROVED) {
+          throw new ApiError(
+            409,
+            `Cannot upload final assets for research item with status ${currentResearchItem.status}`
+          );
+        }
+
+        const currentDesignAssignment = await tx.designAssignment.findFirst({
+          where: {
+            researchItemId,
+            isCurrent: true,
+          },
+          select: {
+            designerId: true,
+          },
+        });
+
+        if (!currentDesignAssignment) {
+          throw new ApiError(409, "No active assignment found for this research item");
+        }
+
+        if (currentDesignAssignment.designerId !== designerId) {
+          throw new ApiError(403, "You are not assigned to this research item");
+        }
+
+        const currentLatestReview = await tx.reviewSubmission.findFirst({
+          where: { researchItemId },
+          orderBy: { roundNumber: "desc" },
+          select: {
+            approvedAt: true,
+          },
+        });
+
+        if (!currentLatestReview || !currentLatestReview.approvedAt) {
+          throw new ApiError(
+            500,
+            "Approved review submission record not found for this design"
+          );
+        }
+
+        const currentFinalAssetCount = await tx.finalAsset.count({
+          where: { researchItemId },
+        });
+
+        if (currentFinalAssetCount > 0) {
+          throw new ApiError(
+            409,
+            "Final assets have already been uploaded for this design."
+          );
+        }
+
+        return Promise.all(
+          uploadedAssets.map((asset) =>
+            tx.finalAsset.create({
+              data: {
+                researchItemId,
+                storageKey: asset.storageKey,
+                fileName: asset.fileName,
+                fileSize: asset.fileSize,
+                mimeType: asset.mimeType,
+                uploadedById: designerId,
+              },
+              select: {
+                id: true,
+                fileName: true,
+                fileSize: true,
+                mimeType: true,
+              },
+            })
+          )
+        );
+      },
+      {
+        maxWait: 10000,
+        timeout: 15000,
+      }
+    );
+
+    return {
+      researchItem: {
+        id: researchItem.id,
+        status: researchItem.status,
+      },
+      finalAssets: finalAssets.map((asset) => ({
+        id: asset.id,
+        fileName: asset.fileName,
+        fileSize: asset.fileSize.toString(),
+        mimeType: asset.mimeType,
+      })),
+    };
+  } catch (error) {
+    await rollbackUploadedFinalAssets(uploadedAssets, storage.remove);
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError(500, "Failed to save final assets");
+  }
 };
 
 // Atomically completes the designer workflow after final assets are uploaded, transitioning status to READY_FOR_LISTING.
