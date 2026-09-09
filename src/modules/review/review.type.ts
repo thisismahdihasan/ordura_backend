@@ -46,3 +46,19 @@ export type RequestCorrectionResult = {
     status: ResearchStatus;
   };
 };
+
+export const NOTIFICATION_TYPE_DESIGN_APPROVED = "DESIGN_APPROVED" as const;
+
+export type ApproveReviewResult = {
+  researchItem: {
+    id: string;
+    status: ResearchStatus;
+  };
+  reviewSubmission: {
+    id: string;
+    roundNumber: number;
+    approvedAt: Date;
+    approvedById: string;
+  };
+};
+
