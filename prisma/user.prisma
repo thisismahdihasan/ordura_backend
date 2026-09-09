@@ -14,6 +14,7 @@ model User {
   issuesReported           IssueReport[]       @relation("ReportedIssues")
   issuesResolved           IssueReport[]       @relation("ResolvedIssues")
   reviewSubmissions        ReviewSubmission[]
+  reviewsApproved          ReviewSubmission[]  @relation("ApprovedReviews")
   reviewAnnotationsCreated ReviewAnnotation[]
   annotationRepliesCreated AnnotationReply[]
   finalAssetsUploaded      FinalAsset[]

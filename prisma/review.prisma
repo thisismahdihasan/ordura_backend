@@ -6,15 +6,19 @@ model ReviewSubmission {
   imageUrl       String
   imagePublicId  String
   note           String?
-  submittedAt    DateTime @default(now())
+  submittedAt    DateTime  @default(now())
+  approvedAt     DateTime?
+  approvedById   String?
 
   researchItem ResearchItem       @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
   designer     User               @relation(fields: [designerId], references: [id], onDelete: Restrict)
+  approvedBy   User?              @relation("ApprovedReviews", fields: [approvedById], references: [id], onDelete: SetNull)
   annotations  ReviewAnnotation[]
 
   @@unique([researchItemId, roundNumber])
   @@index([designerId])
   @@index([submittedAt])
+  @@index([approvedById])
 }
 
 model ReviewAnnotation {
