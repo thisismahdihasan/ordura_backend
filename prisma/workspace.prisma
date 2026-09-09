@@ -9,6 +9,7 @@ model Workspace {
   members       WorkspaceMember[]
   invites       WorkspaceInvite[]
   researchItems ResearchItem[]
+  googleDriveConnection GoogleDriveConnection?
 }
 
 model WorkspaceMember {

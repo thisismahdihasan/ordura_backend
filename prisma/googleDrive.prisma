@@ -1,0 +1,15 @@
+model GoogleDriveConnection {
+  id                    String   @id @default(cuid())
+  workspaceId           String   @unique
+  encryptedRefreshToken String
+  rootFolderId          String
+  googleAccountEmail    String?
+  connectedById         String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedBy User?     @relation("GoogleDriveConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+
+  @@index([connectedById])
+}
