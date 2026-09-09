@@ -3,6 +3,8 @@ import prisma from "../../lib/prisma.js";
 import {
   DashboardOverviewResult,
   DashboardPipelineCounts,
+  DesignerPerformanceResult,
+  DesignerPerformanceRow,
   ResearcherPerformanceResult,
   ResearcherPerformanceRow,
   ResolvedDashboardDateRange,
@@ -298,5 +300,231 @@ export const getResearcherPerformance = async (
   return {
     dateRange,
     researchers,
+  };
+};
+
+// Retrieves designer throughput and performance metrics within the selected cohort window.
+export const getDesignerPerformance = async (
+  workspaceId: string,
+  query: DashboardOverviewQueryInput
+): Promise<DesignerPerformanceResult> => {
+  const { dateRange, filter } = resolveDashboardDateRange(query);
+
+  // 1. Fetch current members with DESIGNER role and 6 aggregate groups in parallel
+  const [
+    currentDesigners,
+    assignedGroups,
+    currentInProgressGroups,
+    submittedGroups,
+    approvedGroups,
+    correctionsGroups,
+    completedGroups,
+  ] = await Promise.all([
+    prisma.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        roles: {
+          has: WorkspaceRole.DESIGNER,
+        },
+      },
+      select: {
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    }),
+    prisma.designAssignment.groupBy({
+      by: ["designerId"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        ...(filter ? { assignedAt: filter } : {}),
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.designAssignment.groupBy({
+      by: ["designerId"],
+      where: {
+        isCurrent: true,
+        researchItem: {
+          workspaceId,
+          status: ResearchStatus.DESIGN_IN_PROGRESS,
+        },
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.reviewSubmission.groupBy({
+      by: ["designerId"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        ...(filter ? { submittedAt: filter } : {}),
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.reviewSubmission.groupBy({
+      by: ["designerId"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        approvedAt: filter ? filter : { not: null },
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.reviewSubmission.groupBy({
+      by: ["designerId"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        roundNumber: {
+          gt: 1,
+        },
+        ...(filter ? { submittedAt: filter } : {}),
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    prisma.designAssignment.groupBy({
+      by: ["designerId"],
+      where: {
+        researchItem: {
+          workspaceId,
+        },
+        completedAt: filter ? filter : { not: null },
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+  ]);
+
+  const designersMap = new Map<string, DesignerPerformanceRow>();
+
+  // 2. Initialize map with all current DESIGNER members (even if all metrics = 0)
+  for (const member of currentDesigners) {
+    designersMap.set(member.userId, {
+      userId: member.userId,
+      name: member.user.name,
+      email: member.user.email,
+      assignedCount: 0,
+      currentInProgress: 0,
+      submittedCount: 0,
+      approvedCount: 0,
+      correctionsCount: 0,
+      completedCount: 0,
+    });
+  }
+
+  // 3. Identify any historical designer who contributed in this window or is in currentInProgress
+  const allGroups = [
+    assignedGroups,
+    currentInProgressGroups,
+    submittedGroups,
+    approvedGroups,
+    correctionsGroups,
+    completedGroups,
+  ];
+
+  const missingDesignerIds = new Set<string>();
+  for (const groups of allGroups) {
+    for (const g of groups) {
+      if (!designersMap.has(g.designerId)) {
+        missingDesignerIds.add(g.designerId);
+      }
+    }
+  }
+
+  // 4. Batch-fetch identity for any historical designers
+  if (missingDesignerIds.size > 0) {
+    const historicalUsers = await prisma.user.findMany({
+      where: {
+        id: { in: Array.from(missingDesignerIds) },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    for (const u of historicalUsers) {
+      designersMap.set(u.id, {
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        assignedCount: 0,
+        currentInProgress: 0,
+        submittedCount: 0,
+        approvedCount: 0,
+        correctionsCount: 0,
+        completedCount: 0,
+      });
+    }
+  }
+
+  // 5. Populate metric counts
+  for (const g of assignedGroups) {
+    const row = designersMap.get(g.designerId);
+    if (row) row.assignedCount = g._count._all;
+  }
+  for (const g of currentInProgressGroups) {
+    const row = designersMap.get(g.designerId);
+    if (row) row.currentInProgress = g._count._all;
+  }
+  for (const g of submittedGroups) {
+    const row = designersMap.get(g.designerId);
+    if (row) row.submittedCount = g._count._all;
+  }
+  for (const g of approvedGroups) {
+    const row = designersMap.get(g.designerId);
+    if (row) row.approvedCount = g._count._all;
+  }
+  for (const g of correctionsGroups) {
+    const row = designersMap.get(g.designerId);
+    if (row) row.correctionsCount = g._count._all;
+  }
+  for (const g of completedGroups) {
+    const row = designersMap.get(g.designerId);
+    if (row) row.completedCount = g._count._all;
+  }
+
+  // 6. Deterministic sort: completedCount DESC -> approvedCount DESC -> name ASC -> userId ASC
+  const designers = Array.from(designersMap.values()).sort((a, b) => {
+    if (b.completedCount !== a.completedCount) {
+      return b.completedCount - a.completedCount;
+    }
+    if (b.approvedCount !== a.approvedCount) {
+      return b.approvedCount - a.approvedCount;
+    }
+    const nameA = a.name ?? "";
+    const nameB = b.name ?? "";
+    const nameDiff = nameA.localeCompare(nameB);
+    if (nameDiff !== 0) {
+      return nameDiff;
+    }
+    return a.userId.localeCompare(b.userId);
+  });
+
+  return {
+    dateRange,
+    designers,
   };
 };

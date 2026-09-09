@@ -41,3 +41,20 @@ export type ResearcherPerformanceResult = {
   dateRange: ResolvedDashboardDateRange;
   researchers: ResearcherPerformanceRow[];
 };
+
+export type DesignerPerformanceRow = {
+  userId: string;
+  name: string | null;
+  email: string;
+  assignedCount: number;
+  currentInProgress: number;
+  submittedCount: number;
+  approvedCount: number;
+  correctionsCount: number;
+  completedCount: number;
+};
+
+export type DesignerPerformanceResult = {
+  dateRange: ResolvedDashboardDateRange;
+  designers: DesignerPerformanceRow[];
+};

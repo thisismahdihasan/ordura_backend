@@ -45,3 +45,23 @@ export const getResearcherPerformance = async (
     data: result,
   });
 };
+
+// Handles HTTP request for the admin dashboard designer performance.
+export const getDesignerPerformance = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId } = dashboardOverviewParamsSchema.parse(req.params);
+  const query = dashboardOverviewQuerySchema.parse(req.query);
+
+  const result = await dashboardService.getDesignerPerformance(
+    workspaceId,
+    query
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Designer performance retrieved successfully",
+    data: result,
+  });
+};
