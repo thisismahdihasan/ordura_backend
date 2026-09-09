@@ -9,6 +9,7 @@ model ReviewSubmission {
   submittedAt    DateTime  @default(now())
   approvedAt     DateTime?
   approvedById   String?
+  imageDeletedAt DateTime?
 
   researchItem ResearchItem       @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
   designer     User               @relation(fields: [designerId], references: [id], onDelete: Restrict)
@@ -19,6 +20,7 @@ model ReviewSubmission {
   @@index([designerId])
   @@index([submittedAt])
   @@index([approvedById])
+  @@index([imageDeletedAt])
 }
 
 model ReviewAnnotation {
