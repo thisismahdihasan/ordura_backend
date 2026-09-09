@@ -4,6 +4,7 @@ import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
+  approveReviewSubmission,
   createAnnotationReply,
   createReviewAnnotation,
   requestReviewCorrection,
@@ -23,6 +24,13 @@ reviewRouter.post(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(requestReviewCorrection)
+);
+
+reviewRouter.post(
+  "/:reviewId/approve",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(approveReviewSubmission)
 );
 
 const annotationRouter: Router = Router({ mergeParams: true });

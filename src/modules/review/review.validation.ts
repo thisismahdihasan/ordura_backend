@@ -87,3 +87,24 @@ export const requestCorrectionBodySchema = z
 export type RequestCorrectionBodyInput = z.infer<
   typeof requestCorrectionBodySchema
 >;
+
+export const approveReviewParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    reviewId: z.string().trim().min(1, "reviewId is required"),
+  })
+  .strict();
+
+export type ApproveReviewParamsInput = z.infer<
+  typeof approveReviewParamsSchema
+>;
+
+export const approveReviewBodySchema = z
+  .object({})
+  .strict()
+  .optional();
+
+export type ApproveReviewBodyInput = z.infer<
+  typeof approveReviewBodySchema
+>;
+

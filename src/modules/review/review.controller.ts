@@ -3,6 +3,8 @@ import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRol
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as reviewService from "./review.service.js";
 import {
+  approveReviewBodySchema,
+  approveReviewParamsSchema,
   createAnnotationReplyBodySchema,
   createAnnotationReplyParamsSchema,
   createReviewAnnotationBodySchema,
@@ -81,3 +83,28 @@ export const requestReviewCorrection = async (
     data: result,
   });
 };
+
+// Handles HTTP request for approving the current review round.
+export const approveReviewSubmission = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, reviewId } = approveReviewParamsSchema.parse(
+    req.params
+  );
+  approveReviewBodySchema.parse(req.body);
+
+  const result = await reviewService.approveReviewSubmission(
+    workspaceId,
+    reviewId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Design approved successfully",
+    data: result,
+  });
+};
+
