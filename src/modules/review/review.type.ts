@@ -1,5 +1,106 @@
 import { ResearchStatus } from "@prisma/client";
 
+export type ReviewUserSummary = {
+  id: string;
+  name: string | null;
+  email: string;
+};
+
+export type ReviewAssignmentSummary = {
+  id: string;
+  designerId: string;
+  assignedAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  isCurrent: boolean;
+};
+
+export type ReviewQueueItem = {
+  review: {
+    id: string;
+    roundNumber: number;
+    imageUrl: string | null;
+    imageDeletedAt: Date | null;
+    note: string | null;
+    submittedAt: Date;
+  };
+  researchItem: {
+    id: string;
+    etsyListingId: string;
+    title: string | null;
+    status: ResearchStatus;
+    originalUrl: string;
+    normalizedUrl: string;
+  };
+  designer: ReviewUserSummary | null;
+};
+
+export type ReviewQueueResult = {
+  items: ReviewQueueItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type ReviewReplyDetail = {
+  id: string;
+  message: string;
+  createdAt: Date;
+  createdBy: {
+    id: string;
+    name: string | null;
+  };
+};
+
+export type ReviewAnnotationDetail = {
+  id: string;
+  x: number;
+  y: number;
+  comment: string;
+  resolved: boolean;
+  createdAt: Date;
+  createdBy: {
+    id: string;
+    name: string | null;
+  };
+  replies: ReviewReplyDetail[];
+};
+
+export type ReviewHistoryItem = {
+  id: string;
+  roundNumber: number;
+  imageUrl: string | null;
+  imageDeletedAt: Date | null;
+  note: string | null;
+  submittedAt: Date;
+  approvedAt: Date | null;
+  approvedById: string | null;
+  annotations: ReviewAnnotationDetail[];
+};
+
+export type ReviewDetailResult = {
+  researchItem: {
+    id: string;
+    etsyListingId: string;
+    originalUrl: string;
+    normalizedUrl: string;
+    title: string | null;
+    referenceImageUrl: string | null;
+    status: ResearchStatus;
+    createdAt: Date;
+    updatedAt: Date;
+    createdBy: ReviewUserSummary;
+  };
+  currentDesigner: ReviewUserSummary | null;
+  currentDesignAssignment: ReviewAssignmentSummary | null;
+  selectedReview: ReviewHistoryItem;
+  latestReviewId: string;
+  reviews: ReviewHistoryItem[];
+};
+
 export type ReviewAnnotationCreatedBy = {
   id: string;
   name: string | null;
@@ -61,4 +162,3 @@ export type ApproveReviewResult = {
     approvedById: string;
   };
 };
-

@@ -14,7 +14,7 @@ import {
   ReassignedResearchItemData,
   ResearchItemListResult,
   SafeResearchItem,
-  SafeResearchItemDetail,
+  ResearchItemDetailResult,
 } from "./research.type.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 
@@ -187,7 +187,7 @@ export const createResearchItem = async (
   }
 };
 
-export const safeResearchItemListSelect = {
+export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSelect>()({
   id: true,
   workspaceId: true,
   etsyListingId: true,
@@ -203,6 +203,96 @@ export const safeResearchItemListSelect = {
       id: true,
       name: true,
       email: true,
+    },
+  },
+  designAssignments: {
+    where: { isCurrent: true },
+    orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      id: true,
+      designerId: true,
+      assignedAt: true,
+      startedAt: true,
+      completedAt: true,
+      isCurrent: true,
+      designer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+  issueReports: {
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      id: true,
+      reason: true,
+      details: true,
+      createdAt: true,
+      reportedBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+});
+
+const safeResearchItemDetailSelect = {
+  id: true,
+  workspaceId: true,
+  etsyListingId: true,
+  originalUrl: true,
+  normalizedUrl: true,
+  title: true,
+  referenceImageUrl: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  designAssignments: {
+    where: { isCurrent: true },
+    take: 1,
+    select: {
+      id: true,
+      designerId: true,
+      assignedAt: true,
+      startedAt: true,
+      completedAt: true,
+      isCurrent: true,
+      designer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+  reviewSubmissions: {
+    orderBy: { roundNumber: "desc" },
+    take: 1,
+    select: {
+      id: true,
+      roundNumber: true,
+      imageUrl: true,
+      imageDeletedAt: true,
+      note: true,
+      submittedAt: true,
+      approvedAt: true,
+      approvedById: true,
     },
   },
 } as const;
@@ -247,7 +337,7 @@ export const getResearchItems = async (
 
   const skip = (page - 1) * limit;
 
-  const [items, total] = await prisma.$transaction([
+  const [rawItems, total] = await prisma.$transaction([
     prisma.researchItem.findMany({
       where,
       select: safeResearchItemListSelect,
@@ -262,6 +352,37 @@ export const getResearchItems = async (
   ]);
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  const items = rawItems.map((item) => {
+    const currentAssignment = item.designAssignments[0] ?? null;
+    const latestIssueReport = item.issueReports[0] ?? null;
+
+    return {
+      id: item.id,
+      workspaceId: item.workspaceId,
+      etsyListingId: item.etsyListingId,
+      originalUrl: item.originalUrl,
+      normalizedUrl: item.normalizedUrl,
+      title: item.title,
+      referenceImageUrl: item.referenceImageUrl,
+      status: item.status,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      createdBy: item.createdBy,
+      currentDesigner: currentAssignment?.designer ?? null,
+      currentDesignAssignment: currentAssignment
+        ? {
+            id: currentAssignment.id,
+            designerId: currentAssignment.designerId,
+            assignedAt: currentAssignment.assignedAt,
+            startedAt: currentAssignment.startedAt,
+            completedAt: currentAssignment.completedAt,
+            isCurrent: currentAssignment.isCurrent,
+          }
+        : null,
+      latestIssueReport,
+    };
+  });
 
   return {
     items,
@@ -278,20 +399,47 @@ export const getResearchItems = async (
 export const getResearchItemById = async (
   workspaceId: string,
   researchItemId: string
-): Promise<SafeResearchItemDetail> => {
+): Promise<ResearchItemDetailResult> => {
   const researchItem = await prisma.researchItem.findFirst({
     where: {
       id: researchItemId,
       workspaceId,
     },
-    select: safeResearchItemListSelect,
+    select: safeResearchItemDetailSelect,
   });
 
   if (!researchItem) {
     throw new ApiError(404, "Research item not found");
   }
 
-  return researchItem;
+  const currentAssignment = researchItem.designAssignments[0] ?? null;
+  const latestReview = researchItem.reviewSubmissions[0] ?? null;
+
+  return {
+    id: researchItem.id,
+    workspaceId: researchItem.workspaceId,
+    etsyListingId: researchItem.etsyListingId,
+    originalUrl: researchItem.originalUrl,
+    normalizedUrl: researchItem.normalizedUrl,
+    title: researchItem.title,
+    referenceImageUrl: researchItem.referenceImageUrl,
+    status: researchItem.status,
+    createdAt: researchItem.createdAt,
+    updatedAt: researchItem.updatedAt,
+    createdBy: researchItem.createdBy,
+    currentDesigner: currentAssignment?.designer ?? null,
+    currentDesignAssignment: currentAssignment
+      ? {
+          id: currentAssignment.id,
+          designerId: currentAssignment.designerId,
+          assignedAt: currentAssignment.assignedAt,
+          startedAt: currentAssignment.startedAt,
+          completedAt: currentAssignment.completedAt,
+          isCurrent: currentAssignment.isCurrent,
+        }
+      : null,
+    latestReview,
+  };
 };
 
 // Retrieves the stored reference image URL for an item after verifying workspace access.

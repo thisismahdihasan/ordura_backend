@@ -39,7 +39,7 @@ export type DuplicateResearchItemData = {
   createdAt: Date;
 };
 
-export type SafeResearchItemListItem = {
+export type ResearchItemReadItem = {
   id: string;
   workspaceId: string;
   etsyListingId: string;
@@ -51,6 +51,12 @@ export type SafeResearchItemListItem = {
   createdAt: Date;
   updatedAt: Date;
   createdBy: DuplicateCreatorInfo;
+};
+
+export type SafeResearchItemListItem = ResearchItemReadItem & {
+  currentDesigner: CurrentDesigner | null;
+  currentDesignAssignment: CurrentDesignAssignment | null;
+  latestIssueReport: LatestIssueReportSummary | null;
 };
 
 export type PaginationMeta = {
@@ -65,7 +71,43 @@ export type ResearchItemListResult = {
   pagination: PaginationMeta;
 };
 
-export type SafeResearchItemDetail = SafeResearchItemListItem;
+export type CurrentDesigner = DuplicateCreatorInfo;
+
+export type CurrentDesignAssignment = {
+  id: string;
+  designerId: string;
+  assignedAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  isCurrent: boolean;
+};
+
+export type LatestIssueReportSummary = {
+  id: string;
+  reason: string;
+  details: string | null;
+  createdAt: Date;
+  reportedBy: DuplicateCreatorInfo;
+};
+
+export type LatestReviewSummary = {
+  id: string;
+  roundNumber: number;
+  imageUrl: string | null;
+  imageDeletedAt: Date | null;
+  note: string | null;
+  submittedAt: Date;
+  approvedAt: Date | null;
+  approvedById: string | null;
+};
+
+export type ResearchItemDetailResult = ResearchItemReadItem & {
+  currentDesigner: CurrentDesigner | null;
+  currentDesignAssignment: CurrentDesignAssignment | null;
+  latestReview: LatestReviewSummary | null;
+};
+
+export type SafeResearchItemDetail = ResearchItemDetailResult;
 
 export type ReassignedResearchItemData = {
   researchItem: {

@@ -8,9 +8,25 @@ import {
   createAnnotationReply,
   createReviewAnnotation,
   requestReviewCorrection,
+  getReviewDetail,
+  getReviewQueue,
 } from "./review.controller.js";
 
 const reviewRouter: Router = Router({ mergeParams: true });
+
+reviewRouter.get(
+  "/",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getReviewQueue)
+);
+
+reviewRouter.get(
+  "/:reviewId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.DESIGNER),
+  catchAsync(getReviewDetail)
+);
 
 reviewRouter.post(
   "/:reviewId/annotations",

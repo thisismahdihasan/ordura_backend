@@ -7,6 +7,7 @@ import { notFound } from "./middleware/notFound.js";
 import { globalErrorHandler } from "./middleware/globalErrorHandler.js";
 import { ApiResponse } from "./shared/ApiResponse.js";
 import { env } from "./config/env.js";
+import { DocsRoutes } from "./docs/docs.route.js";
 
 const app: Express = express();
 
@@ -37,6 +38,7 @@ app.get("/", (_req: Request, res: Response) => {
 
 // Central API router
 app.use("/api/v1", router);
+app.use(DocsRoutes);
 
 // 6. 404 handler
 app.use(notFound);

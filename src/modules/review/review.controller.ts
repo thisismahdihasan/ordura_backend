@@ -11,7 +11,49 @@ import {
   createReviewAnnotationParamsSchema,
   requestCorrectionBodySchema,
   requestCorrectionParamsSchema,
+  getReviewDetailParamsSchema,
+  getReviewQueueParamsSchema,
+  getReviewQueueQuerySchema,
 } from "./review.validation.js";
+
+// Returns review submissions currently awaiting ADMIN action.
+export const getReviewQueue = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId } = getReviewQueueParamsSchema.parse(req.params);
+  const query = getReviewQueueQuerySchema.parse(req.query);
+  const result = await reviewService.getReviewQueue(workspaceId, query);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Review queue retrieved successfully",
+    data: result,
+  });
+};
+
+// Returns one accessible review with its complete history and annotation threads.
+export const getReviewDetail = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, reviewId } = getReviewDetailParamsSchema.parse(
+    req.params
+  );
+  const result = await reviewService.getReviewDetail(
+    workspaceId,
+    reviewId,
+    authReq.user.id,
+    authReq.workspaceMembership.roles
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Review retrieved successfully",
+    data: result,
+  });
+};
 
 // Handles HTTP request for creating an annotation on the current review screenshot.
 export const createReviewAnnotation = async (
@@ -107,4 +149,3 @@ export const approveReviewSubmission = async (
     data: result,
   });
 };
-

@@ -1,10 +1,12 @@
-import { ResearchStatus, WorkspaceRole } from "@prisma/client";
+import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import {
   ApproveReviewResult,
   CreateAnnotationReplyResult,
   CreateReviewAnnotationResult,
+  ReviewDetailResult,
+  ReviewQueueResult,
   NOTIFICATION_TYPE_DESIGN_APPROVED,
   NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED,
   RequestCorrectionResult,
@@ -12,7 +14,239 @@ import {
 import {
   CreateAnnotationReplyBodyInput,
   CreateReviewAnnotationBodyInput,
+  GetReviewQueueQueryInput,
 } from "./review.validation.js";
+
+const safeReviewUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+} as const;
+
+const safeReviewHistorySelect = Prisma.validator<Prisma.ReviewSubmissionSelect>()({
+  id: true,
+  roundNumber: true,
+  imageUrl: true,
+  imageDeletedAt: true,
+  note: true,
+  submittedAt: true,
+  approvedAt: true,
+  approvedById: true,
+  annotations: {
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      x: true,
+      y: true,
+      comment: true,
+      resolved: true,
+      createdAt: true,
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      replies: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          message: true,
+          createdAt: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
+// Retrieves current review submissions awaiting an ADMIN decision in one workspace.
+export const getReviewQueue = async (
+  workspaceId: string,
+  query: GetReviewQueueQueryInput
+): Promise<ReviewQueueResult> => {
+  const where = {
+    workspaceId,
+    status: ResearchStatus.DESIGN_REVIEW,
+  };
+  const skip = (query.page - 1) * query.limit;
+
+  const [researchItems, total] = await prisma.$transaction([
+    prisma.researchItem.findMany({
+      where,
+      select: {
+        id: true,
+        etsyListingId: true,
+        title: true,
+        status: true,
+        originalUrl: true,
+        normalizedUrl: true,
+        reviewSubmissions: {
+          orderBy: { roundNumber: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            roundNumber: true,
+            imageUrl: true,
+            imageDeletedAt: true,
+            note: true,
+            submittedAt: true,
+          },
+        },
+        designAssignments: {
+          where: { isCurrent: true },
+          take: 1,
+          select: {
+            designer: {
+              select: safeReviewUserSelect,
+            },
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      skip,
+      take: query.limit,
+    }),
+    prisma.researchItem.count({ where }),
+  ]);
+
+  const items = researchItems.flatMap((researchItem) => {
+    const review = researchItem.reviewSubmissions[0];
+    if (!review) {
+      return [];
+    }
+
+    return [{
+      review,
+      researchItem: {
+        id: researchItem.id,
+        etsyListingId: researchItem.etsyListingId,
+        title: researchItem.title,
+        status: researchItem.status,
+        originalUrl: researchItem.originalUrl,
+        normalizedUrl: researchItem.normalizedUrl,
+      },
+      designer: researchItem.designAssignments[0]?.designer ?? null,
+    }];
+  });
+
+  return {
+    items,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+    },
+  };
+};
+
+// Returns one accessible review and every review round for the same research item.
+export const getReviewDetail = async (
+  workspaceId: string,
+  reviewId: string,
+  userId: string,
+  userRoles: readonly WorkspaceRole[]
+): Promise<ReviewDetailResult> => {
+  const selectedReviewRecord = await prisma.reviewSubmission.findFirst({
+    where: {
+      id: reviewId,
+      researchItem: { workspaceId },
+    },
+    select: {
+      id: true,
+      researchItem: {
+        select: {
+          id: true,
+          etsyListingId: true,
+          originalUrl: true,
+          normalizedUrl: true,
+          title: true,
+          referenceImageUrl: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+          createdBy: {
+            select: safeReviewUserSelect,
+          },
+          designAssignments: {
+            where: { isCurrent: true },
+            take: 1,
+            select: {
+              id: true,
+              designerId: true,
+              assignedAt: true,
+              startedAt: true,
+              completedAt: true,
+              isCurrent: true,
+              designer: {
+                select: safeReviewUserSelect,
+              },
+            },
+          },
+          reviewSubmissions: {
+            orderBy: [{ roundNumber: "asc" }, { id: "asc" }],
+            select: safeReviewHistorySelect,
+          },
+        },
+      },
+    },
+  });
+
+  if (!selectedReviewRecord) {
+    throw new ApiError(404, "Review submission not found");
+  }
+
+  const currentAssignment =
+    selectedReviewRecord.researchItem.designAssignments[0] ?? null;
+  const isAdmin = userRoles.includes(WorkspaceRole.ADMIN);
+
+  if (!isAdmin && currentAssignment?.designerId !== userId) {
+    throw new ApiError(403, "You are not assigned to this research item");
+  }
+
+  const reviews = selectedReviewRecord.researchItem.reviewSubmissions;
+  const selectedReview = reviews.find((review) => review.id === reviewId);
+  const latestReview = reviews[reviews.length - 1];
+
+  if (!selectedReview || !latestReview) {
+    throw new ApiError(404, "Review submission not found");
+  }
+
+  return {
+    researchItem: {
+      id: selectedReviewRecord.researchItem.id,
+      etsyListingId: selectedReviewRecord.researchItem.etsyListingId,
+      originalUrl: selectedReviewRecord.researchItem.originalUrl,
+      normalizedUrl: selectedReviewRecord.researchItem.normalizedUrl,
+      title: selectedReviewRecord.researchItem.title,
+      referenceImageUrl: selectedReviewRecord.researchItem.referenceImageUrl,
+      status: selectedReviewRecord.researchItem.status,
+      createdAt: selectedReviewRecord.researchItem.createdAt,
+      updatedAt: selectedReviewRecord.researchItem.updatedAt,
+      createdBy: selectedReviewRecord.researchItem.createdBy,
+    },
+    currentDesigner: currentAssignment?.designer ?? null,
+    currentDesignAssignment: currentAssignment
+      ? {
+          id: currentAssignment.id,
+          designerId: currentAssignment.designerId,
+          assignedAt: currentAssignment.assignedAt,
+          startedAt: currentAssignment.startedAt,
+          completedAt: currentAssignment.completedAt,
+          isCurrent: currentAssignment.isCurrent,
+        }
+      : null,
+    selectedReview,
+    latestReviewId: latestReview.id,
+    reviews,
+  };
+};
 
 export const ALLOWED_ANNOTATION_REPLY_STATUSES = [
   ResearchStatus.DESIGN_REVIEW,
@@ -715,4 +949,3 @@ export const approveReviewSubmission = async (
     }
   );
 };
-

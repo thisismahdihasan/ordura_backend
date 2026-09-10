@@ -1,5 +1,46 @@
 import { z } from "zod";
 
+export const getReviewQueueQuerySchema = z
+  .object({
+    page: z.coerce
+      .number()
+      .int("page must be an integer")
+      .positive("page must be a positive integer")
+      .default(1),
+    limit: z.coerce
+      .number()
+      .int("limit must be an integer")
+      .positive("limit must be a positive integer")
+      .max(100, "limit cannot exceed 100")
+      .default(20),
+  })
+  .strict();
+
+export type GetReviewQueueQueryInput = z.infer<
+  typeof getReviewQueueQuerySchema
+>;
+
+export const getReviewQueueParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+  })
+  .strict();
+
+export type GetReviewQueueParamsInput = z.infer<
+  typeof getReviewQueueParamsSchema
+>;
+
+export const getReviewDetailParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    reviewId: z.string().trim().min(1, "reviewId is required"),
+  })
+  .strict();
+
+export type GetReviewDetailParamsInput = z.infer<
+  typeof getReviewDetailParamsSchema
+>;
+
 export const createReviewAnnotationParamsSchema = z
   .object({
     workspaceId: z.string().trim().min(1, "workspaceId is required"),
@@ -107,4 +148,3 @@ export const approveReviewBodySchema = z
 export type ApproveReviewBodyInput = z.infer<
   typeof approveReviewBodySchema
 >;
-

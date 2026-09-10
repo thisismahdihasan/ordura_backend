@@ -9,6 +9,7 @@ export const DESIGNER_QUEUE_ACTIVE_STATUSES = [
   ResearchStatus.DESIGN_REVIEW,
   ResearchStatus.CORRECTION_NEEDED,
   ResearchStatus.ISSUE_REPORTED,
+  ResearchStatus.DESIGN_APPROVED,
 ] as const;
 
 export type DesignerQueueActiveStatus =
@@ -36,7 +37,7 @@ export const getDesignerWorkQueueQuerySchema = z
           (DESIGNER_QUEUE_ACTIVE_STATUSES as readonly ResearchStatus[]).includes(val),
         {
           message:
-            "Invalid status filter. Allowed values: ASSIGNED, DESIGN_IN_PROGRESS, DESIGN_REVIEW, CORRECTION_NEEDED, ISSUE_REPORTED",
+            "Invalid status filter. Allowed values: ASSIGNED, DESIGN_IN_PROGRESS, DESIGN_REVIEW, CORRECTION_NEEDED, ISSUE_REPORTED, DESIGN_APPROVED",
         }
       )
       .optional(),

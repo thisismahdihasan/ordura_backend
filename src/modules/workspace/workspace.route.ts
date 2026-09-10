@@ -3,7 +3,11 @@ import { WorkspaceRole } from "@prisma/client";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
-import { createWorkspace } from "./workspace.controller.js";
+import {
+  createWorkspace,
+  getWorkspaceMembers,
+  getUserWorkspaces,
+} from "./workspace.controller.js";
 import { createWorkspaceInvite } from "../workspaceInvite/workspaceInvite.controller.js";
 import { ResearchRoutes } from "../research/research.route.js";
 import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
@@ -13,12 +17,19 @@ import { DashboardRoutes } from "../dashboard/dashboard.route.js";
 
 const router: Router = Router();
 
+router.get("/", requireAuth, catchAsync(getUserWorkspaces));
 router.post("/", requireAuth, catchAsync(createWorkspace));
 router.post(
   "/:workspaceId/invites",
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(createWorkspaceInvite)
+);
+router.get(
+  "/:workspaceId/members",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getWorkspaceMembers)
 );
 router.use("/:workspaceId/research-items", ResearchRoutes);
 router.use("/:workspaceId/designer", DesignerRoutes);

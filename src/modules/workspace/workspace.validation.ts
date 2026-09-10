@@ -9,3 +9,7 @@ export const createWorkspaceSchema = z.object({
 });
 
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
+
+export const workspaceIdParamsSchema = z.object({
+  workspaceId: z.string().trim().min(1, "Workspace ID is required"),
+}).strict();
