@@ -1,7 +1,7 @@
 {
-  "name": "ordura_backend",
+  "name": "storeops-backend",
   "version": "1.0.0",
-  "description": "Backend API for Ordura",
+  "description": "Backend API for StoreOps",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {

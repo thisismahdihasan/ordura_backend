@@ -59,7 +59,7 @@ export const buildFinalAssetKey = ({
   return `workspaces/${workspaceId}/research-items/${researchItemId}/${crypto.randomUUID()}-${safeFileName}`;
 };
 
-// Uploads a stream to Ordura's private R2 bucket without materializing it in memory.
+// Uploads a stream to StoreOps' private R2 bucket without materializing it in memory.
 export const uploadObject = async ({
   storageKey,
   body,

@@ -25,9 +25,9 @@ export const buildInviteEmail = ({
 }: BuildInviteEmailOptions): BuiltInviteEmail => {
   const inviteUrl = buildInviteUrl(rawToken);
   const formattedRoles = roles.join(", ");
-  const subject = `Invitation to join ${workspaceName} on Ordura`;
+  const subject = `Invitation to join ${workspaceName} on StoreOps`;
 
-  const text = `You have been invited to join ${workspaceName} on Ordura with the role(s): ${formattedRoles}.
+  const text = `You have been invited to join ${workspaceName} on StoreOps with the role(s): ${formattedRoles}.
 
 This invitation is valid for 24 hours.
 
@@ -44,7 +44,7 @@ If you were not expecting this invitation, you can safely ignore this email.`;
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <h2 style="color: #111;">You're invited to join ${workspaceName}</h2>
-  <p>You have been invited to join <strong>${workspaceName}</strong> on Ordura with the following role(s):</p>
+  <p>You have been invited to join <strong>${workspaceName}</strong> on StoreOps with the following role(s):</p>
   <p style="background: #f4f4f5; padding: 10px 14px; border-radius: 6px; font-weight: bold; display: inline-block;">
     ${formattedRoles}
   </p>

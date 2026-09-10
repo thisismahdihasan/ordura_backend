@@ -10,7 +10,7 @@ export const getHealth = async (
   const databaseStatus = await checkDatabaseHealth();
 
   ApiResponse.success(res, {
-    message: "Ordura backend is healthy",
+    message: "StoreOps backend is healthy",
     data: {
       database: databaseStatus,
     },

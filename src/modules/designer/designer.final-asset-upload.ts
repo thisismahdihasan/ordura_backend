@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
     const safeExt = path.extname(file.originalname).toLowerCase();
-    cb(null, `ordura-final-${uniqueSuffix}${safeExt}`);
+    cb(null, `storeops-final-${uniqueSuffix}${safeExt}`);
   },
 });
 

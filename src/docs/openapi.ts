@@ -28,7 +28,7 @@ const paths: OpenApiPathMap = {
 export const openApiDocument = {
   openapi: "3.0.3",
   info: {
-    title: "Ordura API",
+    title: "StoreOps API",
     description: "Internal Etsy/POD production workflow API.",
     version: "1.0.0",
   },

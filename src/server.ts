@@ -6,7 +6,7 @@ import { Server } from "http";
 const PORT = env.PORT;
 
 const server: Server = app.listen(PORT, () => {
-  console.log(`Ordura backend server running on port ${PORT}`);
+  console.log(`StoreOps backend server running on port ${PORT}`);
 });
 
 let isShuttingDown = false;

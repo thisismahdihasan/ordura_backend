@@ -32,7 +32,7 @@ app.use(cookieParser());
 // 5. Routes
 app.get("/", (_req: Request, res: Response) => {
   ApiResponse.success(res, {
-    message: "Ordura backend is running",
+    message: "StoreOps backend is running",
   });
 });
 

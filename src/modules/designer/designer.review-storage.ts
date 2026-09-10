@@ -3,7 +3,7 @@ import { getCloudinaryClient } from "../../config/cloudinary.js";
 import { ApiError } from "../../shared/ApiError.js";
 
 // Cloudinary folder destination for temporary review screenshot uploads
-export const CLOUDINARY_REVIEW_FOLDER = "ordura/review-submissions";
+export const CLOUDINARY_REVIEW_FOLDER = "storeops/review-submissions";
 
 // Allowed MIME types strictly validated before storage
 export const ALLOWED_REVIEW_IMAGE_MIMETYPES = [

@@ -18,7 +18,7 @@ const envSchema = z.object({
       "JWT_EXPIRES_IN must be a valid timespan (e.g. 7d, 24h, 3600s)"
     )
     .default("7d"),
-  COOKIE_NAME: z.string().default("ordura_token"),
+  COOKIE_NAME: z.string().default("storeops_token"),
   SMTP_HOST: z.string().min(1, "SMTP_HOST is required"),
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().min(1, "SMTP_USER is required"),
