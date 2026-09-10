@@ -5,8 +5,9 @@ model ResearchItem {
   originalUrl       String
   normalizedUrl     String
   title             String?
-  referenceImageUrl String?
-  createdById       String
+  referenceImageUrl      String?
+  referenceImagePublicId String?
+  createdById            String
   status            ResearchStatus @default(RESEARCHED)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt

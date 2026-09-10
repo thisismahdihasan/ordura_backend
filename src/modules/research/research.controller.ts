@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { pipeline, Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
+import { ApiError } from "../../shared/ApiError.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import {
   createByteLimitTransform,
@@ -13,7 +14,9 @@ import {
   getReferenceImageQuerySchema,
   getResearchItemParamsSchema,
   getResearchItemsQuerySchema,
+  previewResearchItemSchema,
   reassignDesignerBodySchema,
+  updateResearchItemBodySchema,
 } from "./research.validation.js";
 
 // Creates a research item from an Etsy listing URL and automatically assigns an eligible designer.
@@ -158,4 +161,101 @@ export const reassignResearchDesigner = async (
   });
 };
 
+// Previews Etsy listing metadata and duplicate status without creating database records.
+export const previewResearchItem = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
 
+  const validatedInput = previewResearchItemSchema.parse(req.body);
+
+  const preview = await researchService.previewResearchItem(
+    workspaceId,
+    validatedInput
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research preview retrieved successfully",
+    data: preview,
+  });
+};
+
+// Uploads and updates the reference image for an existing research item manually.
+export const uploadResearchReferenceImage = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, researchItemId } = getResearchItemParamsSchema.parse(
+    req.params
+  );
+
+  if (!req.file) {
+    throw new ApiError(400, "Image file is required on 'image' field");
+  }
+
+  const result = await researchService.uploadResearchReferenceImage(
+    workspaceId,
+    researchItemId,
+    {
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+    }
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research reference image updated successfully",
+    data: result,
+  });
+};
+
+// Updates minimal research item metadata (title) for an existing item.
+export const updateResearchItem = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, researchItemId } = getResearchItemParamsSchema.parse(
+    req.params
+  );
+  const validatedBody = updateResearchItemBodySchema.parse(req.body);
+
+  const researchItem = await researchService.updateResearchItem(
+    workspaceId,
+    researchItemId,
+    validatedBody
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research item updated successfully",
+    data: {
+      researchItem,
+    },
+  });
+};
+
+// Deletes an early-stage research item and its initial setup records safely.
+export const deleteResearchItem = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, researchItemId } = getResearchItemParamsSchema.parse(
+    req.params
+  );
+
+  const result = await researchService.deleteResearchItem(
+    workspaceId,
+    researchItemId
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research item deleted successfully",
+    data: result,
+  });
+};

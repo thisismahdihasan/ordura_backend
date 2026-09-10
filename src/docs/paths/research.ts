@@ -59,6 +59,75 @@ const researchDetailItem = {
 };
 
 export const researchPaths: OpenApiPathMap = {
+  "/api/v1/workspaces/{workspaceId}/research-items/preview": {
+    post: {
+      tags: ["Research"],
+      summary: "Preview Etsy listing metadata and duplicate status",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN or RESEARCHER role required. Previews Etsy listing title, image, and checks whether the listing already exists in this workspace without creating any persistent database records.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["etsyUrl"],
+              properties: {
+                etsyUrl: {
+                  type: "string",
+                  format: "uri",
+                  description:
+                    "HTTP(S) Etsy listing URL containing a numeric listing ID.",
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": jsonSuccess("Research preview retrieved successfully.", {
+          type: "object",
+          required: [
+            "etsyListingId",
+            "normalizedUrl",
+            "title",
+            "referenceImageUrl",
+            "alreadyExists",
+            "duplicate",
+          ],
+          properties: {
+            etsyListingId: { type: "string" },
+            normalizedUrl: { type: "string", format: "uri" },
+            title: { type: "string", nullable: true },
+            referenceImageUrl: { type: "string", format: "uri", nullable: true },
+            alreadyExists: { type: "boolean" },
+            duplicate: {
+              type: "object",
+              nullable: true,
+              required: [
+                "researchItemId",
+                "createdBy",
+                "currentStatus",
+                "createdAt",
+              ],
+              properties: {
+                researchItemId: { type: "string" },
+                createdBy: { $ref: "#/components/schemas/CreatedBySummary" },
+                currentStatus: { $ref: "#/components/schemas/ResearchStatus" },
+                createdAt: { type: "string", format: "date-time" },
+              },
+            },
+          },
+        }),
+        "400": jsonError("Invalid Etsy listing URL."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN or RESEARCHER role is required."),
+      },
+    },
+  },
   "/api/v1/workspaces/{workspaceId}/research-items": {
     post: {
       tags: ["Research"], summary: "Create a research item from an Etsy listing", security: [{ cookieAuth: [] }],
@@ -92,8 +161,111 @@ export const researchPaths: OpenApiPathMap = {
       tags: ["Research"], summary: "Get one workspace research item", security: [{ cookieAuth: [] }], parameters: workspaceAndResearchParameters,
       responses: { "200": jsonSuccess("Research item retrieved successfully.", { type: "object", required: ["researchItem"], properties: { researchItem: researchDetailItem } }), "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Research item was not found.") },
     },
+    patch: {
+      tags: ["Research"],
+      summary: "Update research item title",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN role required. Allows updating research item title. Empty trimmed string normalizes to null. No workflow status or URL changes permitted.",
+      parameters: workspaceAndResearchParameters,
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                title: {
+                  type: "string",
+                  nullable: true,
+                  maxLength: 500,
+                  description: "Listing title override, up to 500 characters.",
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": jsonSuccess("Research item updated successfully.", {
+          type: "object",
+          required: ["researchItem"],
+          properties: {
+            researchItem: { $ref: "#/components/schemas/ResearchItemSafe" },
+          },
+        }),
+        "400": jsonError("Invalid request body."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN role is required."),
+        "404": jsonError("Research item was not found."),
+      },
+    },
+    delete: {
+      tags: ["Research"],
+      summary: "Delete an early-stage research item",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN role required. Allowed only for items in RESEARCHED or ASSIGNED status that have no substantive downstream production history (reviews, issues, final assets, or started designer work). Initial auto-assignments and notifications are cleaned atomically.",
+      parameters: workspaceAndResearchParameters,
+      responses: {
+        "200": jsonSuccess("Research item deleted successfully.", {
+          type: "object",
+          required: ["researchItemId"],
+          properties: {
+            researchItemId: { type: "string" },
+          },
+        }),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN role is required."),
+        "404": jsonError("Research item was not found."),
+        "409": jsonError(
+          "Cannot delete research item that has progressed into production workflow."
+        ),
+      },
+    },
   },
   "/api/v1/workspaces/{workspaceId}/research-items/{researchItemId}/reference-image": {
+    post: {
+      tags: ["Research"],
+      summary: "Manually upload or replace reference image",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN or RESEARCHER role required. Uploads a manual reference image (JPEG, PNG, WebP up to 10MB) to managed storage. Replaces any previous managed image safely.",
+      parameters: workspaceAndResearchParameters,
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              required: ["image"],
+              properties: {
+                image: {
+                  type: "string",
+                  format: "binary",
+                  description: "Image file (JPEG, PNG, WebP, max 10MB)",
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": jsonSuccess("Research reference image updated successfully.", {
+          type: "object",
+          required: ["researchItemId", "referenceImageUrl"],
+          properties: {
+            researchItemId: { type: "string" },
+            referenceImageUrl: { type: "string", format: "uri" },
+          },
+        }),
+        "400": jsonError("Invalid image file or unsupported format."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN or RESEARCHER role is required."),
+        "404": jsonError("Research item was not found."),
+      },
+    },
     get: {
       tags: ["Research"], summary: "Proxy a research reference image", security: [{ cookieAuth: [] }],
       description: "Returns a protected binary image. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",

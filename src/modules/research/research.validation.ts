@@ -103,3 +103,23 @@ export const reassignDesignerBodySchema = z
 export type ReassignDesignerBodyInput = z.infer<
   typeof reassignDesignerBodySchema
 >;
+
+export const previewResearchItemSchema = createResearchItemSchema;
+
+export type PreviewResearchItemInput = CreateResearchItemInput;
+
+export const updateResearchItemBodySchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .max(500, "Title cannot exceed 500 characters")
+      .transform((val) => (val.length === 0 ? null : val))
+      .nullable()
+      .optional(),
+  })
+  .strict();
+
+export type UpdateResearchItemBodyInput = z.infer<
+  typeof updateResearchItemBodySchema
+>;

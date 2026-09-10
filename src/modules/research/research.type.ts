@@ -121,3 +121,28 @@ export type ReassignedResearchItemData = {
     isCurrent: boolean;
   };
 };
+
+export type PreviewDuplicateInfo = {
+  researchItemId: string;
+  createdBy: DuplicateCreatorInfo;
+  currentStatus: ResearchStatus;
+  createdAt: Date;
+};
+
+export type ResearchPreviewResult = {
+  etsyListingId: string;
+  normalizedUrl: string;
+  title: string | null;
+  referenceImageUrl: string | null;
+  alreadyExists: boolean;
+  duplicate: PreviewDuplicateInfo | null;
+};
+
+export type ManualReferenceImageUploadResult = {
+  researchItemId: string;
+  referenceImageUrl: string;
+};
+
+export type DeleteResearchItemResult = {
+  researchItemId: string;
+};

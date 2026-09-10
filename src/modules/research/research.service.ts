@@ -7,6 +7,8 @@ import { findLeastWorkloadDesigner } from "./research.assignment.js";
 import {
   CreateResearchItemInput,
   GetResearchItemsQueryInput,
+  PreviewResearchItemInput,
+  UpdateResearchItemBodyInput,
 } from "./research.validation.js";
 import {
   DuplicateResearchItemData,
@@ -15,7 +17,16 @@ import {
   ResearchItemListResult,
   SafeResearchItem,
   ResearchItemDetailResult,
+  ResearchPreviewResult,
+  ManualReferenceImageUploadResult,
+  DeleteResearchItemResult,
 } from "./research.type.js";
+import {
+  destroyReferenceImageFromCloudinary,
+  uploadReferenceImageToCloudinary,
+  ReferenceImageUploader,
+  ReferenceImageDestroyer,
+} from "./research.storage.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 
 export const safeResearchItemSelect = {
@@ -614,4 +625,264 @@ export const reassignResearchDesigner = async (
     maxWait: 10000,
     timeout: 15000,
   });
+};
+
+// Previews Etsy listing metadata and checks same-workspace duplicates without persistent mutations.
+export const previewResearchItem = async (
+  workspaceId: string,
+  input: PreviewResearchItemInput,
+  options?: CreateResearchItemOptions
+): Promise<ResearchPreviewResult> => {
+  const { normalizedUrl, etsyListingId } = extractEtsyListing(input.etsyUrl);
+
+  const existingItem = await prisma.researchItem.findUnique({
+    where: {
+      workspaceId_etsyListingId: {
+        workspaceId,
+        etsyListingId,
+      },
+    },
+    select: duplicateResearchItemSelect,
+  });
+
+  let metadata: EtsyMetadata = { title: null, referenceImageUrl: null };
+  try {
+    const metadataFetcher = options?.metadataFetcher ?? fetchEtsyMetadata;
+    metadata = await metadataFetcher(normalizedUrl);
+  } catch {
+    metadata = { title: null, referenceImageUrl: null };
+  }
+
+  if (existingItem) {
+    return {
+      etsyListingId,
+      normalizedUrl,
+      title: metadata.title,
+      referenceImageUrl: metadata.referenceImageUrl,
+      alreadyExists: true,
+      duplicate: {
+        researchItemId: existingItem.id,
+        createdBy: existingItem.createdBy,
+        currentStatus: existingItem.status,
+        createdAt: existingItem.createdAt,
+      },
+    };
+  }
+
+  return {
+    etsyListingId,
+    normalizedUrl,
+    title: metadata.title,
+    referenceImageUrl: metadata.referenceImageUrl,
+    alreadyExists: false,
+    duplicate: null,
+  };
+};
+
+export type UploadReferenceImageOptions = {
+  uploader?: ReferenceImageUploader;
+  destroyer?: ReferenceImageDestroyer;
+};
+
+// Manually uploads and updates the reference image for a research item in Cloudinary.
+export const uploadResearchReferenceImage = async (
+  workspaceId: string,
+  researchItemId: string,
+  file: { buffer: Buffer; mimetype: string },
+  options?: UploadReferenceImageOptions
+): Promise<ManualReferenceImageUploadResult> => {
+  const existingItem = await prisma.researchItem.findUnique({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      referenceImagePublicId: true,
+    },
+  });
+
+  if (!existingItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  const uploader = options?.uploader ?? uploadReferenceImageToCloudinary;
+  const uploadResult = await uploader({
+    buffer: file.buffer,
+    mimetype: file.mimetype,
+  });
+
+  try {
+    await prisma.researchItem.update({
+      where: {
+        id: researchItemId,
+        workspaceId,
+      },
+      data: {
+        referenceImageUrl: uploadResult.secureUrl,
+        referenceImagePublicId: uploadResult.publicId,
+      },
+    });
+  } catch (dbError) {
+    const destroyer =
+      options?.destroyer ?? destroyReferenceImageFromCloudinary;
+    await destroyer(uploadResult.publicId);
+    throw dbError;
+  }
+
+  if (
+    existingItem.referenceImagePublicId &&
+    existingItem.referenceImagePublicId !== uploadResult.publicId
+  ) {
+    const destroyer =
+      options?.destroyer ?? destroyReferenceImageFromCloudinary;
+    await destroyer(existingItem.referenceImagePublicId);
+  }
+
+  return {
+    researchItemId: existingItem.id,
+    referenceImageUrl: uploadResult.secureUrl,
+  };
+};
+
+// Updates editable metadata (title) for a research item.
+export const updateResearchItem = async (
+  workspaceId: string,
+  researchItemId: string,
+  input: UpdateResearchItemBodyInput
+): Promise<SafeResearchItem> => {
+  const existingItem = await prisma.researchItem.findUnique({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: { id: true },
+  });
+
+  if (!existingItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  const updatedItem = await prisma.researchItem.update({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    data: {
+      ...(input.title !== undefined ? { title: input.title } : {}),
+    },
+    select: safeResearchItemSelect,
+  });
+
+  return updatedItem;
+};
+
+export type DeleteResearchItemOptions = {
+  destroyer?: ReferenceImageDestroyer;
+};
+
+// Production-safe deletion of early-stage research items with no substantive downstream workflow.
+export const deleteResearchItem = async (
+  workspaceId: string,
+  researchItemId: string,
+  options?: DeleteResearchItemOptions
+): Promise<DeleteResearchItemResult> => {
+  const item = await prisma.researchItem.findUnique({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      status: true,
+      referenceImagePublicId: true,
+      designAssignments: {
+        select: {
+          id: true,
+          startedAt: true,
+          completedAt: true,
+        },
+      },
+      reviewSubmissions: {
+        select: { id: true },
+        take: 1,
+      },
+      issueReports: {
+        select: { id: true },
+        take: 1,
+      },
+      finalAssets: {
+        select: { id: true },
+        take: 1,
+      },
+      listingAssignments: {
+        select: { id: true },
+        take: 1,
+      },
+      listingResult: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!item) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  const ALLOWED_DELETE_STATUSES: ResearchStatus[] = [
+    ResearchStatus.RESEARCHED,
+    ResearchStatus.ASSIGNED,
+  ];
+
+  if (!ALLOWED_DELETE_STATUSES.includes(item.status)) {
+    throw new ApiError(
+      409,
+      `Cannot delete research item in '${item.status}' status. Only items in RESEARCHED or ASSIGNED status may be deleted.`
+    );
+  }
+
+  const hasStartedAssignment = item.designAssignments.some(
+    (a) => a.startedAt !== null || a.completedAt !== null
+  );
+  const hasSubstantiveRecords =
+    hasStartedAssignment ||
+    item.reviewSubmissions.length > 0 ||
+    item.issueReports.length > 0 ||
+    item.finalAssets.length > 0 ||
+    item.listingAssignments.length > 0 ||
+    item.listingResult !== null;
+
+  if (hasSubstantiveRecords) {
+    throw new ApiError(
+      409,
+      "Cannot delete research item with active or completed production workflow history"
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.notification.deleteMany({
+      where: { researchItemId },
+    });
+
+    await tx.designAssignment.deleteMany({
+      where: { researchItemId },
+    });
+
+    await tx.researchItem.delete({
+      where: {
+        id: researchItemId,
+        workspaceId,
+      },
+    });
+  });
+
+  if (item.referenceImagePublicId) {
+    const destroyer =
+      options?.destroyer ?? destroyReferenceImageFromCloudinary;
+    await destroyer(item.referenceImagePublicId);
+  }
+
+  return {
+    researchItemId: item.id,
+  };
 };
