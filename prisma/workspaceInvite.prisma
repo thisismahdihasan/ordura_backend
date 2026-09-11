@@ -6,6 +6,11 @@ model WorkspaceInvite {
   tokenHash   String          @unique
   expiresAt   DateTime
   acceptedAt  DateTime?
+  lastSentAt  DateTime?
+  lastMessageId String?
+  lastSmtpResponse String?
+  lastAccepted Json?
+  lastRejected Json?
   invitedById String
   createdAt   DateTime        @default(now())
 

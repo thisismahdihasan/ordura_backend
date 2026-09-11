@@ -11,11 +11,23 @@ const inviteBody = {
 
 const inviteData = {
   type: "object", required: ["invite"], properties: {
-    invite: { type: "object", required: ["id", "workspaceId", "email", "roles", "expiresAt", "createdAt"], properties: {
+    invite: { type: "object", required: ["id", "workspaceId", "email", "roles", "expiresAt", "createdAt", "lastSentAt"], properties: {
       id: { type: "string" }, workspaceId: { type: "string" }, email: { type: "string", format: "email" },
       roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } },
-      expiresAt: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" },
+      expiresAt: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" }, lastSentAt: { type: "string", format: "date-time" },
     } },
+  },
+};
+
+const pendingInviteData = {
+  type: "object", required: ["invites"], properties: {
+    invites: { type: "array", items: { type: "object", required: ["id", "email", "roles", "createdAt", "expiresAt", "acceptedAt", "lastSentAt", "status"], properties: {
+      id: { type: "string" }, email: { type: "string", format: "email" },
+      roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } },
+      createdAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" },
+      acceptedAt: { type: "string", format: "date-time", nullable: true }, lastSentAt: { type: "string", format: "date-time", nullable: true },
+      status: { type: "string", enum: ["PENDING", "EXPIRED"] },
+    } } },
   },
 };
 
@@ -61,7 +73,7 @@ export const workspacePaths: OpenApiPathMap = {
       tags: ["Invites"], summary: "Create an invite for the caller's resolved admin workspace",
       description: "Fails when the caller administers multiple workspaces; use the workspace-scoped route instead.",
       security: [{ cookieAuth: [] }], requestBody: { required: true, content: { "application/json": { schema: inviteBody } } },
-      responses: { "201": jsonSuccess("Invite created and emailed successfully.", inviteData), "400": jsonError("Invalid invite body or ambiguous workspace."), "401": jsonError("Authentication is required."), "403": jsonError("Caller is not a workspace admin."), "409": jsonError("Member or active invite already exists."), "500": jsonError("Invitation email delivery failed.") },
+      responses: { "201": jsonSuccess("Invite created and submitted to the mail server successfully.", inviteData), "400": jsonError("Invalid invite body or ambiguous workspace."), "401": jsonError("Authentication is required."), "403": jsonError("Caller is not a workspace admin."), "409": jsonError("Member or active invite already exists."), "500": jsonError("Invitation email delivery failed.") },
     },
   },
   "/api/v1/workspace/invites/{token}/accept": {
@@ -75,10 +87,35 @@ export const workspacePaths: OpenApiPathMap = {
     },
   },
   "/api/v1/workspaces/{workspaceId}/invites": {
+    get: {
+      tags: ["Invites"], summary: "List unaccepted workspace invitations",
+      description: "ADMIN only. Returns unaccepted invitations in newest-first order. `status=pending` is supported; status is derived as PENDING or EXPIRED. Tokens and SMTP evidence are never exposed.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { name: "status", in: "query", required: false, schema: { type: "string", enum: ["pending"] } }],
+      responses: { "200": jsonSuccess("Pending workspace invitations retrieved successfully.", pendingInviteData), "400": jsonError("Invalid invite query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required.") },
+    },
     post: {
       tags: ["Invites"], summary: "Create a workspace-scoped invitation", security: [{ cookieAuth: [] }],
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }], requestBody: { required: true, content: { "application/json": { schema: inviteBody } } },
-      responses: { "201": jsonSuccess("Invite created and emailed successfully.", inviteData), "400": jsonError("Invalid invite body."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "409": jsonError("Member or active invite already exists."), "500": jsonError("Invitation email delivery failed.") },
+      responses: { "201": jsonSuccess("Invite created and submitted to the mail server successfully.", inviteData), "400": jsonError("Invalid invite body."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "409": jsonError("Member or active invite already exists."), "500": jsonError("Invitation email delivery failed."), "502": jsonError("Invitation email submission could not be finalized.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/invites/{inviteId}/resend": {
+    post: {
+      tags: ["Invites"], summary: "Resend a workspace invitation",
+      description: "ADMIN only. Resends an unaccepted active or expired invitation after a five-minute cooldown. Each successful resend rotates the token and resets link expiry to 24 hours. Tokens and SMTP evidence are never exposed.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { name: "inviteId", in: "path", required: true, schema: { type: "string", minLength: 1 } }],
+      responses: { "200": jsonSuccess("Workspace invitation resent successfully.", inviteData), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "404": jsonError("Workspace invitation was not found."), "409": jsonError("Accepted invitation or changed invite state."), "429": jsonError("Invite resend cooldown is active. `data.retryAfterSeconds` is returned."), "502": jsonError("Invitation mail submission failed or could not be finalized.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/invites/{inviteId}": {
+    delete: {
+      tags: ["Invites"], summary: "Revoke an unaccepted workspace invitation",
+      description: "ADMIN only. Active and expired unaccepted invitations may be deleted. Accepted invitations return 409. Revocation invalidates the old token.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { name: "inviteId", in: "path", required: true, schema: { type: "string", minLength: 1 } }],
+      responses: { "200": jsonSuccess("Workspace invitation revoked successfully.", { type: "object", required: ["inviteId"], properties: { inviteId: { type: "string" } } }), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "404": jsonError("Workspace invitation was not found."), "409": jsonError("Accepted invitation or changed invite state.") },
     },
   },
   "/api/v1/workspaces/{workspaceId}/members": {

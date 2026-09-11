@@ -8,7 +8,12 @@ import {
   getWorkspaceMembers,
   getUserWorkspaces,
 } from "./workspace.controller.js";
-import { createWorkspaceInvite } from "../workspaceInvite/workspaceInvite.controller.js";
+import {
+  createWorkspaceInvite,
+  getPendingWorkspaceInvites,
+  resendWorkspaceInvite,
+  revokeWorkspaceInvite,
+} from "../workspaceInvite/workspaceInvite.controller.js";
 import { ResearchRoutes } from "../research/research.route.js";
 import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
 import { ReviewRoutes, AnnotationRoutes } from "../review/review.route.js";
@@ -24,6 +29,24 @@ router.post(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(createWorkspaceInvite)
+);
+router.get(
+  "/:workspaceId/invites",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getPendingWorkspaceInvites)
+);
+router.post(
+  "/:workspaceId/invites/:inviteId/resend",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(resendWorkspaceInvite)
+);
+router.delete(
+  "/:workspaceId/invites/:inviteId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(revokeWorkspaceInvite)
 );
 router.get(
   "/:workspaceId/members",

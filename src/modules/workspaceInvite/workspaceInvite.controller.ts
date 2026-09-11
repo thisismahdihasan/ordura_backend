@@ -5,6 +5,9 @@ import * as workspaceInviteService from "./workspaceInvite.service.js";
 import {
   acceptWorkspaceInviteParamsSchema,
   createWorkspaceInviteSchema,
+  listWorkspaceInvitesQuerySchema,
+  workspaceIdParamsSchema,
+  workspaceInviteIdParamsSchema,
 } from "./workspaceInvite.validation.js";
 
 // Issues an email invitation with designated workspace roles to a prospective member.
@@ -48,6 +51,67 @@ export const acceptWorkspaceInvite = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Workspace invitation accepted successfully",
+    data: result,
+  });
+};
+
+export const getPendingWorkspaceInvites = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { status } = listWorkspaceInvitesQuerySchema.parse(req.query);
+  const { workspaceId } = workspaceIdParamsSchema.parse(req.params);
+
+  const result = await workspaceInviteService.getPendingWorkspaceInvites(
+    authReq.user.id,
+    workspaceId,
+    status
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Pending workspace invitations retrieved successfully",
+    data: result,
+  });
+};
+
+export const resendWorkspaceInvite = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { inviteId, workspaceId } = workspaceInviteIdParamsSchema.parse(req.params);
+
+  const result = await workspaceInviteService.resendWorkspaceInvite(
+    authReq.user.id,
+    workspaceId,
+    inviteId
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace invitation resent successfully",
+    data: result,
+  });
+};
+
+export const revokeWorkspaceInvite = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { inviteId, workspaceId } = workspaceInviteIdParamsSchema.parse(req.params);
+
+  const result = await workspaceInviteService.revokeWorkspaceInvite(
+    authReq.user.id,
+    workspaceId,
+    inviteId
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace invitation revoked successfully",
     data: result,
   });
 };

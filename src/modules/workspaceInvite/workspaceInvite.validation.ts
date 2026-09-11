@@ -19,6 +19,19 @@ export const createWorkspaceInviteSchema = z.object({
 
 export type CreateWorkspaceInviteInput = z.infer<typeof createWorkspaceInviteSchema>;
 
+export const listWorkspaceInvitesQuerySchema = z.object({
+  status: z.literal("pending").optional(),
+});
+
+export const workspaceIdParamsSchema = z.object({
+  workspaceId: z.string().trim().min(1, "Workspace ID is required"),
+});
+
+export const workspaceInviteIdParamsSchema = z.object({
+  inviteId: z.string().trim().min(1, "Invite ID is required"),
+  workspaceId: z.string().trim().min(1, "Workspace ID is required"),
+});
+
 export const acceptWorkspaceInviteParamsSchema = z.object({
   token: z
     .string({ message: "Invitation token is required" })
