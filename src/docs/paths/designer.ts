@@ -19,6 +19,101 @@ const standardWorkflowErrors = {
   "409": jsonError("The current workflow state does not allow this action."),
 };
 
+const designerDetailResponse = {
+  type: "object",
+  required: [
+    "researchItem",
+    "researcher",
+    "assignment",
+    "currentDesigner",
+    "latestReview",
+    "latestIssue",
+    "finalAssets",
+  ],
+  properties: {
+    researchItem: {
+      type: "object",
+      required: ["id", "title", "etsyListingId", "originalUrl", "status", "createdAt", "updatedAt"],
+      properties: {
+        id: { type: "string" },
+        title: { type: "string", nullable: true },
+        etsyListingId: { type: "string" },
+        originalUrl: { type: "string", format: "uri" },
+        status: { $ref: "#/components/schemas/ResearchStatus" },
+        createdAt: { type: "string", format: "date-time" },
+        updatedAt: { type: "string", format: "date-time" },
+      },
+    },
+    researcher: { $ref: "#/components/schemas/CreatedBySummary" },
+    assignment: {
+      type: "object",
+      required: ["id", "assignedAt", "startedAt", "isCurrent"],
+      properties: {
+        id: { type: "string" },
+        assignedAt: { type: "string", format: "date-time" },
+        startedAt: { type: "string", format: "date-time", nullable: true },
+        isCurrent: { type: "boolean", enum: [true] },
+      },
+    },
+    currentDesigner: { $ref: "#/components/schemas/CreatedBySummary" },
+    latestReview: {
+      type: "object",
+      nullable: true,
+      required: ["id", "roundNumber", "imageUrl", "imageDeletedAt", "note", "submittedAt", "approvedAt", "annotations"],
+      properties: {
+        id: { type: "string" },
+        roundNumber: { type: "integer" },
+        imageUrl: { type: "string", format: "uri", nullable: true, description: "Always null when imageDeletedAt is set." },
+        imageDeletedAt: { type: "string", format: "date-time", nullable: true },
+        note: { type: "string", nullable: true },
+        submittedAt: { type: "string", format: "date-time" },
+        approvedAt: { type: "string", format: "date-time", nullable: true },
+        annotations: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "x", "y", "comment", "resolved", "createdAt", "createdBy", "replies"],
+            properties: {
+              id: { type: "string" }, x: { type: "number" }, y: { type: "number" },
+              comment: { type: "string" }, resolved: { type: "boolean" }, createdAt: { type: "string", format: "date-time" },
+              createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } },
+              replies: { type: "array", items: { type: "object", required: ["id", "message", "createdAt", "createdBy"], properties: { id: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } },
+            },
+          },
+        },
+      },
+    },
+    latestIssue: {
+      type: "object",
+      nullable: true,
+      required: ["id", "reason", "details", "createdAt"],
+      properties: {
+        id: { type: "string" }, reason: { $ref: "#/components/schemas/IssueReason" },
+        details: { type: "string", nullable: true }, createdAt: { type: "string", format: "date-time" },
+      },
+    },
+    finalAssets: {
+      type: "object",
+      required: ["count", "items"],
+      properties: {
+        count: { type: "integer", minimum: 0 },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "fileName", "fileSize", "mimeType", "uploadedAt"],
+            properties: {
+              id: { type: "string" }, fileName: { type: "string" },
+              fileSize: { type: "string", description: "Decimal byte count." },
+              mimeType: { type: "string" }, uploadedAt: { type: "string", format: "date-time" },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 export const designerPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/designer/my-work": {
     get: {
@@ -30,6 +125,14 @@ export const designerPaths: OpenApiPathMap = {
         { name: "status", in: "query", schema: { type: "string", enum: ["ASSIGNED", "DESIGN_IN_PROGRESS", "DESIGN_REVIEW", "CORRECTION_NEEDED", "ISSUE_REPORTED", "DESIGN_APPROVED"] } },
       ],
       responses: { "200": jsonSuccess("Designer work queue retrieved successfully.", { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { type: "object", required: ["assignmentId", "assignedAt", "startedAt", "researchItem"], properties: { assignmentId: { type: "string" }, assignedAt: { type: "string", format: "date-time" }, startedAt: { type: "string", format: "date-time", nullable: true }, researchItem: { allOf: [{ $ref: "#/components/schemas/ResearchItemSafe" }, { type: "object", required: ["createdBy"], properties: { createdBy: { $ref: "#/components/schemas/CreatedBySummary" } } }] } } } }, pagination: { $ref: "#/components/schemas/Pagination" } } }), "400": jsonError("Invalid queue query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit DESIGNER role is required.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/design/{researchItemId}": {
+    get: {
+      tags: ["Designer"], summary: "Get current designer-owned work detail", security: [{ cookieAuth: [] }],
+      description: "Explicit DESIGNER role and current-assignment ownership are both required. ADMIN alone does not grant access; an ADMIN plus DESIGNER user must still be the current assigned designer. The response includes only safe final-asset metadata and never includes storage keys, buckets, provider URLs, or signed URLs. The latest review is selected by descending roundNumber; its imageUrl is null when imageDeletedAt is set.",
+      parameters: itemParameters,
+      responses: { "200": jsonSuccess("Design detail retrieved successfully.", designerDetailResponse), "401": jsonError("Authentication is required."), "403": jsonError("Explicit DESIGNER role and current assignment are required."), "404": jsonError("Research item was not found.") },
     },
   },
   "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/start": {

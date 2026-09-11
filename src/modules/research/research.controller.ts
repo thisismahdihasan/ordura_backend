@@ -100,9 +100,12 @@ export const getResearchReferenceImage = async (
   );
   const { download } = getReferenceImageQuerySchema.parse(req.query);
 
-  const { referenceImageUrl } = await researchService.getReferenceImageData(
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { referenceImageUrl } = await researchService.getAuthorizedReferenceImageData(
     workspaceId,
-    researchItemId
+    researchItemId,
+    authReq.user.id,
+    authReq.workspaceMembership.roles
   );
 
   const imageResult = await fetchSafeImageStream(referenceImageUrl);

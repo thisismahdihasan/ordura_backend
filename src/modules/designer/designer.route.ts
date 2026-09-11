@@ -5,6 +5,7 @@ import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   getDesignerWorkQueue,
+  getDesignDetail,
   reportDesignIssue,
   startCorrection,
   startDesignWork,
@@ -25,6 +26,13 @@ designerRouter.get(
 );
 
 const designRouter: Router = Router({ mergeParams: true });
+
+designRouter.get(
+  "/:researchItemId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(getDesignDetail)
+);
 
 designRouter.post(
   "/:researchItemId/start",
@@ -74,4 +82,3 @@ designRouter.post(
 export const DesignerRoutes = designerRouter;
 export const DesignRoutes = designRouter;
 export default designerRouter;
-

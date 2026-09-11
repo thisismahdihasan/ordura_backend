@@ -268,7 +268,7 @@ export const researchPaths: OpenApiPathMap = {
     },
     get: {
       tags: ["Research"], summary: "Proxy a research reference image", security: [{ cookieAuth: [] }],
-      description: "Returns a protected binary image. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
+      description: "Returns a protected binary image. ADMIN and RESEARCHER retain research-management access; DESIGNER-only users must be the current assigned designer. LISTER behavior remains the existing workspace-role contract. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
       parameters: [...workspaceAndResearchParameters, { name: "download", in: "query", schema: { type: "string", enum: ["true", "false", "1", "0"] } }],
       responses: { "200": { description: "Image stream with image Content-Type and Content-Disposition.", headers: { "Content-Disposition": { schema: { type: "string" } }, "Cache-Control": { schema: { type: "string" } } }, content: { "image/*": { schema: { type: "string", format: "binary" } } } }, "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Item or reference image was not found."), "502": jsonError("Reference image could not be safely loaded."), "504": jsonError("Reference image request timed out.") },
     },

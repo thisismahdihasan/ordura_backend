@@ -22,6 +22,7 @@ import {
   UploadFinalAssetsResult,
   CompleteDesignResult,
 } from "./designer.type.js";
+import { DesignerDetailResult } from "./designer.detail.type.js";
 import {
   ReviewImageDestroyer,
   ReviewImageUploadInput,
@@ -92,6 +93,179 @@ export const safeDesignerWorkQueueSelect = {
     },
   },
 } as const;
+
+const safeDesignerDetailSelect = Prisma.validator<Prisma.ResearchItemSelect>()({
+  id: true,
+  etsyListingId: true,
+  originalUrl: true,
+  title: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  designAssignments: {
+    where: { isCurrent: true },
+    orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      id: true,
+      designerId: true,
+      assignedAt: true,
+      startedAt: true,
+      isCurrent: true,
+      designer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+  reviewSubmissions: {
+    orderBy: [{ roundNumber: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      id: true,
+      roundNumber: true,
+      imageUrl: true,
+      imageDeletedAt: true,
+      note: true,
+      submittedAt: true,
+      approvedAt: true,
+      annotations: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          x: true,
+          y: true,
+          comment: true,
+          resolved: true,
+          createdAt: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          replies: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            select: {
+              id: true,
+              message: true,
+              createdAt: true,
+              createdBy: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  issueReports: {
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      id: true,
+      reason: true,
+      details: true,
+      createdAt: true,
+    },
+  },
+  finalAssets: {
+    orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      fileName: true,
+      fileSize: true,
+      mimeType: true,
+      uploadedAt: true,
+    },
+  },
+});
+
+// Returns a designer-owned detail contract after enforcing current assignment ownership.
+export const getDesignDetail = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string
+): Promise<DesignerDetailResult> => {
+  const researchItem = await prisma.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: safeDesignerDetailSelect,
+  });
+
+  if (!researchItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  const assignment = researchItem.designAssignments[0];
+  if (!assignment || assignment.designerId !== designerId) {
+    throw new ApiError(403, "You are not assigned to this research item");
+  }
+
+  const latestReview = researchItem.reviewSubmissions[0] ?? null;
+  const latestIssue = researchItem.issueReports[0] ?? null;
+
+  return {
+    researchItem: {
+      id: researchItem.id,
+      title: researchItem.title,
+      etsyListingId: researchItem.etsyListingId,
+      originalUrl: researchItem.originalUrl,
+      status: researchItem.status,
+      createdAt: researchItem.createdAt,
+      updatedAt: researchItem.updatedAt,
+    },
+    researcher: researchItem.createdBy,
+    assignment: {
+      id: assignment.id,
+      assignedAt: assignment.assignedAt,
+      startedAt: assignment.startedAt,
+      isCurrent: true,
+    },
+    currentDesigner: assignment.designer,
+    latestReview: latestReview
+      ? {
+          id: latestReview.id,
+          roundNumber: latestReview.roundNumber,
+          imageUrl:
+            latestReview.imageDeletedAt === null
+              ? latestReview.imageUrl
+              : null,
+          imageDeletedAt: latestReview.imageDeletedAt,
+          note: latestReview.note,
+          submittedAt: latestReview.submittedAt,
+          approvedAt: latestReview.approvedAt,
+          annotations: latestReview.annotations,
+        }
+      : null,
+    latestIssue,
+    finalAssets: {
+      count: researchItem.finalAssets.length,
+      items: researchItem.finalAssets.map((asset) => ({
+        id: asset.id,
+        fileName: asset.fileName,
+        fileSize: asset.fileSize.toString(),
+        mimeType: asset.mimeType,
+        uploadedAt: asset.uploadedAt,
+      })),
+    },
+  };
+};
 
 // Retrieves current active design assignments for the authenticated designer in a workspace.
 export const getDesignerWorkQueue = async (

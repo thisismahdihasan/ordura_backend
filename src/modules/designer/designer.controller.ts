@@ -11,6 +11,7 @@ import {
 import { FinalAssetIncomingFile } from "./designer.type.js";
 import {
   getDesignerWorkQueueQuerySchema,
+  getDesignDetailParamsSchema,
   reportDesignIssueBodySchema,
   reportDesignIssueParamsSchema,
   startCorrectionBodySchema,
@@ -22,6 +23,29 @@ import {
   completeDesignBodySchema,
   completeDesignParamsSchema,
 } from "./designer.validation.js";
+
+// Returns the authenticated current designer's private design-work detail.
+export const getDesignDetail = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = getDesignDetailParamsSchema.parse(
+    req.params
+  );
+
+  const result = await designerService.getDesignDetail(
+    workspaceId,
+    researchItemId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Design detail retrieved successfully",
+    data: result,
+  });
+};
 
 // Handles HTTP request for fetching the authenticated designer's active work queue.
 export const getDesignerWorkQueue = async (

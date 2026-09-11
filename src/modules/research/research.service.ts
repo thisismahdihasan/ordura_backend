@@ -424,7 +424,16 @@ export const getResearchItemById = async (
   }
 
   const currentAssignment = researchItem.designAssignments[0] ?? null;
-  const latestReview = researchItem.reviewSubmissions[0] ?? null;
+  const rawLatestReview = researchItem.reviewSubmissions[0] ?? null;
+  const latestReview = rawLatestReview
+    ? {
+        ...rawLatestReview,
+        imageUrl:
+          rawLatestReview.imageDeletedAt === null
+            ? rawLatestReview.imageUrl
+            : null,
+      }
+    : null;
 
   return {
     id: researchItem.id,
@@ -471,6 +480,58 @@ export const getReferenceImageData = async (
 
   if (!item) {
     throw new ApiError(404, "Research item not found");
+  }
+
+  if (!item.referenceImageUrl || item.referenceImageUrl.trim() === "") {
+    throw new ApiError(404, "Reference image not available");
+  }
+
+  return {
+    id: item.id,
+    referenceImageUrl: item.referenceImageUrl.trim(),
+  };
+};
+
+// Preserves research-management access while requiring designer-only users to own the current assignment.
+export const getAuthorizedReferenceImageData = async (
+  workspaceId: string,
+  researchItemId: string,
+  userId: string,
+  roles: readonly WorkspaceRole[]
+): Promise<{ id: string; referenceImageUrl: string }> => {
+  const item = await prisma.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      referenceImageUrl: true,
+      designAssignments: {
+        where: { isCurrent: true },
+        orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+        take: 1,
+        select: {
+          designerId: true,
+        },
+      },
+    },
+  });
+
+  if (!item) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  const hasResearchManagementRole =
+    roles.includes(WorkspaceRole.ADMIN) ||
+    roles.includes(WorkspaceRole.RESEARCHER);
+  const isDesignerOnly =
+    roles.includes(WorkspaceRole.DESIGNER) &&
+    !hasResearchManagementRole &&
+    !roles.includes(WorkspaceRole.LISTER);
+
+  if (isDesignerOnly && item.designAssignments[0]?.designerId !== userId) {
+    throw new ApiError(403, "You are not assigned to this research item");
   }
 
   if (!item.referenceImageUrl || item.referenceImageUrl.trim() === "") {

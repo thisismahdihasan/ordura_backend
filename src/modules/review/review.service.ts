@@ -122,7 +122,10 @@ export const getReviewQueue = async (
     }
 
     return [{
-      review,
+      review: {
+        ...review,
+        imageUrl: review.imageDeletedAt === null ? review.imageUrl : null,
+      },
       researchItem: {
         id: researchItem.id,
         etsyListingId: researchItem.etsyListingId,
@@ -210,7 +213,12 @@ export const getReviewDetail = async (
     throw new ApiError(403, "You are not assigned to this research item");
   }
 
-  const reviews = selectedReviewRecord.researchItem.reviewSubmissions;
+  const reviews = selectedReviewRecord.researchItem.reviewSubmissions.map(
+    (review) => ({
+      ...review,
+      imageUrl: review.imageDeletedAt === null ? review.imageUrl : null,
+    })
+  );
   const selectedReview = reviews.find((review) => review.id === reviewId);
   const latestReview = reviews[reviews.length - 1];
 
