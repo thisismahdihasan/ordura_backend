@@ -14,10 +14,19 @@ const app: Express = express();
 // 1. Helmet for security headers
 app.use(helmet());
 
-// 2. CORS with environment-driven frontend origin and credentials enabled
+const allowedFrontendOrigins = new Set(env.FRONTEND_URLS);
+
+// 2. CORS with exact environment-driven frontend origins and credentials enabled
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin(origin, callback) {
+      if (!origin || allowedFrontendOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Origin not allowed by CORS"));
+    },
     credentials: true,
   })
 );

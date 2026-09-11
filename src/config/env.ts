@@ -9,7 +9,32 @@ const envSchema = z.object({
     .default("development"),
   PORT: z.coerce.number().default(5000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  FRONTEND_URL: z.string().url("FRONTEND_URL must be a valid URL"),
+  FRONTEND_URLS: z
+    .string()
+    .min(1, "FRONTEND_URLS is required")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0)
+    )
+    .refine((origins) => origins.length > 0, {
+      message: "FRONTEND_URLS must contain at least one origin",
+    })
+    .refine(
+      (origins) =>
+        origins.every((origin) => {
+          try {
+            return new URL(origin).origin === origin;
+          } catch {
+            return false;
+          }
+        }),
+      {
+        message:
+          "FRONTEND_URLS must be a comma-separated list of absolute origins without paths or trailing slashes",
+      }
+    ),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   JWT_EXPIRES_IN: z
     .string()
