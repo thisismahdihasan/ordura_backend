@@ -11,6 +11,7 @@ import {
   getResearchReferenceImage,
   previewResearchItem,
   reassignResearchDesigner,
+  syncResearchAssignments,
   updateResearchItem,
   uploadResearchReferenceImage,
 } from "./research.controller.js";
@@ -49,6 +50,16 @@ router.patch(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(reassignResearchDesigner)
+);
+
+// Sync unassigned RESEARCHED backlog to eligible Designers (ADMIN only, idempotent).
+// Registered before /:researchItemId routes to prevent "sync-assignments" being matched
+// as a researchItemId param by any future POST /:researchItemId route.
+router.post(
+  "/sync-assignments",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(syncResearchAssignments)
 );
 
 router.post(

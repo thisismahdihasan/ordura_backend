@@ -281,4 +281,42 @@ export const researchPaths: OpenApiPathMap = {
       responses: { "200": jsonSuccess("Designer reassigned successfully.", { type: "object", required: ["researchItem", "assignment"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/ResearchStatus" } } }, assignment: { $ref: "#/components/schemas/AssignmentSummary" } } }), "400": jsonError("Target user is not a workspace designer."), "401": jsonError("Authentication is required."), "403": jsonError("ADMIN role is required."), "404": jsonError("Research item was not found."), "409": jsonError("The item cannot be reassigned in its current state.") },
     },
   },
+  "/api/v1/workspaces/{workspaceId}/research-items/sync-assignments": {
+    post: {
+      tags: ["Research"],
+      summary: "Sync unassigned research backlog to available Designers",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN role required. Assigns all currently unassigned RESEARCHED items in the workspace to eligible Designers using least-load balancing with deterministic tie-breaking (lowest load → earliest membership join date → ascending user ID). " +
+        "Only items with status RESEARCHED and no current DesignAssignment are affected. Items in any other status are never touched. " +
+        "Idempotent: safe to run multiple times. A second run after all items are assigned returns assignedCount: 0 with no duplicate assignments or notifications. " +
+        "If no eligible Designers exist in the workspace, returns success with assignedCount: 0 — not an error.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      responses: {
+        "200": jsonSuccess("Backlog assignment sync completed.", {
+          type: "object",
+          required: ["assignedCount", "remainingUnassignedCount", "designerCount"],
+          properties: {
+            assignedCount: {
+              type: "integer",
+              minimum: 0,
+              description: "Number of RESEARCHED items assigned to Designers in this sync run.",
+            },
+            remainingUnassignedCount: {
+              type: "integer",
+              minimum: 0,
+              description: "Number of RESEARCHED items that remain unassigned after this run.",
+            },
+            designerCount: {
+              type: "integer",
+              minimum: 0,
+              description: "Number of eligible Designers (explicit DESIGNER role) in the workspace.",
+            },
+          },
+        }),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN role is required."),
+      },
+    },
+  },
 };

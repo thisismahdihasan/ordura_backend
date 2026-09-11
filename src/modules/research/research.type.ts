@@ -146,3 +146,9 @@ export type ManualReferenceImageUploadResult = {
 export type DeleteResearchItemResult = {
   researchItemId: string;
 };
+
+export type BacklogSyncResult = {
+  assignedCount: number;
+  remainingUnassignedCount: number;
+  designerCount: number;
+};

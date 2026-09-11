@@ -1,6 +1,7 @@
 import { Prisma, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
+import { assignUnassignedResearchBacklog } from "../research/research.assignment.js";
 import {
   getMailTransportErrorDetails,
   MailSendEvidence,
@@ -533,6 +534,8 @@ export const revokeWorkspaceInvite = async (
 };
 
 // Validates the invitation token, verifies recipient email match, and grants workspace membership.
+// After successful membership creation, triggers backlog assignment if the invite included DESIGNER.
+// Backlog sync failure is logged and does not affect membership acceptance.
 export const acceptWorkspaceInvite = async (
   userId: string,
   userEmail: string,
@@ -540,8 +543,10 @@ export const acceptWorkspaceInvite = async (
 ): Promise<AcceptWorkspaceInviteResult> => {
   const tokenHash = hashInviteToken(rawToken);
 
+  let acceptResult: AcceptWorkspaceInviteResult;
+
   try {
-    return await prisma.$transaction(async (tx) => {
+    acceptResult = await prisma.$transaction(async (tx) => {
       const invite = await tx.workspaceInvite.findUnique({
         where: { tokenHash },
         select: {
@@ -639,5 +644,24 @@ export const acceptWorkspaceInvite = async (
     }
     throw error;
   }
-};
 
+  // Trigger backlog assignment recovery if the new member has an explicit DESIGNER role.
+  // This runs after the transaction commits so it cannot roll back the accepted membership.
+  if (acceptResult.membership.roles.includes(WorkspaceRole.DESIGNER)) {
+    try {
+      await assignUnassignedResearchBacklog(acceptResult.membership.workspaceId);
+    } catch (syncError) {
+      console.warn(
+        "Backlog assignment sync failed after Designer joined workspace. " +
+        "Membership accepted successfully. Admin can recover via manual sync.",
+        {
+          workspaceId: acceptResult.membership.workspaceId,
+          userId: acceptResult.membership.userId,
+          error: syncError instanceof Error ? syncError.message : String(syncError),
+        }
+      );
+    }
+  }
+
+  return acceptResult;
+};

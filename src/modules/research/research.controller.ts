@@ -8,6 +8,7 @@ import {
   createByteLimitTransform,
   fetchSafeImageStream,
 } from "./research.referenceImage.js";
+import { assignUnassignedResearchBacklog } from "./research.assignment.js";
 import * as researchService from "./research.service.js";
 import {
   createResearchItemSchema,
@@ -256,6 +257,26 @@ export const deleteResearchItem = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Research item deleted successfully",
+    data: result,
+  });
+};
+
+// Assigns all currently unassigned RESEARCHED items to eligible Designers using least-load
+// balancing. ADMIN only. Idempotent — safe to run repeatedly with no side-effects.
+export const syncResearchAssignments = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+
+  const result = await assignUnassignedResearchBacklog(workspaceId);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Backlog assignment sync completed",
     data: result,
   });
 };
