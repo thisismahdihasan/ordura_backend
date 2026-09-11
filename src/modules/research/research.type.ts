@@ -53,10 +53,17 @@ export type ResearchItemReadItem = {
   createdBy: DuplicateCreatorInfo;
 };
 
+export type ResearchReviewActivity = {
+  designerReplyCount: number;
+  latestDesignerReplyAt: Date | string | null;
+  latestReviewId: string | null;
+};
+
 export type SafeResearchItemListItem = ResearchItemReadItem & {
   currentDesigner: CurrentDesigner | null;
   currentDesignAssignment: CurrentDesignAssignment | null;
   latestIssueReport: LatestIssueReportSummary | null;
+  reviewActivity: ResearchReviewActivity;
 };
 
 export type PaginationMeta = {

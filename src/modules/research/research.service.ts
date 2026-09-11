@@ -15,6 +15,7 @@ import {
   EtsyMetadata,
   ReassignedResearchItemData,
   ResearchItemListResult,
+  ResearchReviewActivity,
   SafeResearchItem,
   ResearchItemDetailResult,
   ResearchPreviewResult,
@@ -364,9 +365,17 @@ export const getResearchItems = async (
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
+  const itemIds = rawItems.map((item) => item.id);
+  const reviewActivityMap = await getResearchReviewActivityMap(itemIds);
+
   const items = rawItems.map((item) => {
     const currentAssignment = item.designAssignments[0] ?? null;
     const latestIssueReport = item.issueReports[0] ?? null;
+    const activity = reviewActivityMap[item.id] ?? {
+      designerReplyCount: 0,
+      latestDesignerReplyAt: null,
+      latestReviewId: null,
+    };
 
     return {
       id: item.id,
@@ -392,6 +401,13 @@ export const getResearchItems = async (
           }
         : null,
       latestIssueReport,
+      reviewActivity: {
+        designerReplyCount: activity.designerReplyCount,
+        latestDesignerReplyAt: activity.latestDesignerReplyAt
+          ? activity.latestDesignerReplyAt.toISOString()
+          : null,
+        latestReviewId: activity.latestReviewId,
+      },
     };
   });
 
@@ -404,6 +420,87 @@ export const getResearchItems = async (
       totalPages,
     },
   };
+};
+
+export type ResearchReviewActivityMap = Record<
+  string,
+  {
+    designerReplyCount: number;
+    latestDesignerReplyAt: Date | null;
+    latestReviewId: string | null;
+  }
+>;
+
+// Fetches review activity (designer reply count, latest review ID, latest designer reply timestamp)
+// in a single batched query for the current research item IDs, preventing N+1 queries.
+export const getResearchReviewActivityMap = async (
+  itemIds: string[]
+): Promise<ResearchReviewActivityMap> => {
+  const map: ResearchReviewActivityMap = {};
+  if (itemIds.length === 0) {
+    return map;
+  }
+
+  for (const itemId of itemIds) {
+    map[itemId] = {
+      designerReplyCount: 0,
+      latestDesignerReplyAt: null,
+      latestReviewId: null,
+    };
+  }
+
+  const reviewSubmissions = await prisma.reviewSubmission.findMany({
+    where: {
+      researchItemId: { in: itemIds },
+    },
+    select: {
+      id: true,
+      researchItemId: true,
+      roundNumber: true,
+      designerId: true,
+      annotations: {
+        select: {
+          replies: {
+            select: {
+              id: true,
+              createdById: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [
+      { roundNumber: "desc" },
+      { id: "desc" },
+    ],
+  });
+
+  for (const submission of reviewSubmissions) {
+    const entry = map[submission.researchItemId];
+    if (!entry) continue;
+
+    // The first submission encountered for each item has the highest roundNumber
+    if (!entry.latestReviewId) {
+      entry.latestReviewId = submission.id;
+    }
+
+    for (const annotation of submission.annotations) {
+      for (const reply of annotation.replies) {
+        if (reply.createdById === submission.designerId) {
+          entry.designerReplyCount += 1;
+          if (
+            !entry.latestDesignerReplyAt ||
+            reply.createdAt > entry.latestDesignerReplyAt
+          ) {
+            entry.latestDesignerReplyAt = reply.createdAt;
+          }
+        }
+      }
+    }
+  }
+
+  return map;
 };
 
 // Fetches details for a single research item scoped strictly to the specified workspace.

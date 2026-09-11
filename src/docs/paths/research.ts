@@ -26,7 +26,7 @@ const researchListItem = {
     researchReadItem,
     {
       type: "object",
-      required: ["latestIssueReport"],
+      required: ["latestIssueReport", "reviewActivity"],
       properties: {
         latestIssueReport: {
           type: "object",
@@ -38,6 +38,23 @@ const researchListItem = {
             details: { type: "string", nullable: true },
             createdAt: { type: "string", format: "date-time" },
             reportedBy: { $ref: "#/components/schemas/CreatedBySummary" },
+          },
+        },
+        reviewActivity: {
+          type: "object",
+          required: [
+            "designerReplyCount",
+            "latestDesignerReplyAt",
+            "latestReviewId",
+          ],
+          properties: {
+            designerReplyCount: { type: "integer", minimum: 0 },
+            latestDesignerReplyAt: {
+              type: "string",
+              format: "date-time",
+              nullable: true,
+            },
+            latestReviewId: { type: "string", nullable: true },
           },
         },
       },
