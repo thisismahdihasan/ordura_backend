@@ -2,6 +2,7 @@ import { Prisma, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import {
+  getMailTransportErrorDetails,
   MailSendEvidence,
   sendMail,
 } from "../../services/mail.service.js";
@@ -65,6 +66,55 @@ const pendingInviteSelect = {
 } as const;
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+const maskRecipient = (email: string): string => {
+  const normalizedEmail = normalizeEmail(email);
+  const atIndex = normalizedEmail.lastIndexOf("@");
+
+  if (atIndex <= 0 || atIndex === normalizedEmail.length - 1) {
+    return "[invalid-recipient]";
+  }
+
+  return `${normalizedEmail.slice(0, 1)}***@${normalizedEmail.slice(atIndex + 1)}`;
+};
+
+const recipientDomain = (email: string): string | null => {
+  const normalizedEmail = normalizeEmail(email);
+  const atIndex = normalizedEmail.lastIndexOf("@");
+
+  return atIndex > 0 && atIndex < normalizedEmail.length - 1
+    ? normalizedEmail.slice(atIndex + 1)
+    : null;
+};
+
+const logInviteMailFailure = ({
+  action,
+  email,
+  error,
+  inviteId,
+  workspaceId,
+}: {
+  action: "initial" | "resend";
+  email: string;
+  error: unknown;
+  inviteId: string;
+  workspaceId: string;
+}): void => {
+  const details = getMailTransportErrorDetails(error);
+
+  console.warn("Workspace invitation mail submission failed", {
+    action,
+    inviteId,
+    workspaceId,
+    recipient: maskRecipient(email),
+    recipientDomain: recipientDomain(email),
+    smtpErrorCode: details.code,
+    smtpCommand: details.command,
+    smtpMessage: details.message,
+    smtpResponse: details.response,
+    smtpResponseCode: details.responseCode,
+  });
+};
 
 const recipientWasAccepted = (
   evidence: MailSendEvidence,
@@ -280,12 +330,15 @@ export const createWorkspaceInvite = async (
       workspaceName,
     });
   } catch (error) {
-    console.warn("Workspace invitation email submission failed", {
+    logInviteMailFailure({
+      action: "initial",
+      email: input.email,
+      error,
       inviteId: invite.id,
       workspaceId,
     });
     await cleanupInviteAfterInitialSendFailure(invite.id);
-    throw new ApiError(500, "Failed to send invitation email");
+    throw new ApiError(502, "Failed to send invitation email");
   }
 
   const sentAt = new Date();
@@ -388,7 +441,10 @@ export const resendWorkspaceInvite = async (
       workspaceName: invite.workspace.name,
     });
   } catch (error) {
-    console.warn("Workspace invitation resend submission failed", {
+    logInviteMailFailure({
+      action: "resend",
+      email: invite.email,
+      error,
       inviteId: invite.id,
       workspaceId: workspace.id,
     });

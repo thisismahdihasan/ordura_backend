@@ -97,7 +97,7 @@ export const workspacePaths: OpenApiPathMap = {
     post: {
       tags: ["Invites"], summary: "Create a workspace-scoped invitation", security: [{ cookieAuth: [] }],
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }], requestBody: { required: true, content: { "application/json": { schema: inviteBody } } },
-      responses: { "201": jsonSuccess("Invite created and submitted to the mail server successfully.", inviteData), "400": jsonError("Invalid invite body."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "409": jsonError("Member or active invite already exists."), "500": jsonError("Invitation email delivery failed."), "502": jsonError("Invitation email submission could not be finalized.") },
+      responses: { "201": jsonSuccess("Invite created and submitted to the mail server successfully.", inviteData), "400": jsonError("Invalid invite body."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "409": jsonError("Member or active invite already exists."), "502": jsonError("Invitation mail provider did not complete the request, or submission could not be finalized.") },
     },
   },
   "/api/v1/workspaces/{workspaceId}/invites/{inviteId}/resend": {
