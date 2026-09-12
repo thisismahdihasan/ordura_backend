@@ -5,6 +5,7 @@ import * as listingService from "./listing.service.js";
 import {
   backfillListingAssignmentsParamsSchema,
   getListerWorkQueueQuerySchema,
+  getListerListingDetailParamsSchema,
   startListingBodySchema,
   startListingParamsSchema,
   downloadFinalAssetParamsSchema,
@@ -65,6 +66,28 @@ export const getListerWorkQueue = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Lister work queue retrieved successfully",
+    data: result,
+  });
+};
+
+// Returns active listing detail to the current assigned lister only.
+export const getListerListingDetail = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } =
+    getListerListingDetailParamsSchema.parse(req.params);
+
+  const result = await listingService.getListerListingDetail(
+    workspaceId,
+    researchItemId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Listing detail retrieved successfully",
     data: result,
   });
 };

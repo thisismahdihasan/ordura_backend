@@ -50,6 +50,17 @@ export type GetListerWorkQueueQueryInput = z.infer<
   typeof getListerWorkQueueQuerySchema
 >;
 
+export const getListerListingDetailParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export type GetListerListingDetailParamsInput = z.infer<
+  typeof getListerListingDetailParamsSchema
+>;
+
 export const backfillListingAssignmentsParamsSchema = z
   .object({
     workspaceId: z.string().trim().min(1, "workspaceId is required"),

@@ -8,6 +8,7 @@ import {
   BackfillListingResult,
   CompleteListingResult,
   FinalAssetDownloadDescriptor,
+  ListerListingDetailResult,
   ListerWorkQueueItem,
   ListerWorkQueueResult,
   StartListingResult,
@@ -28,6 +29,10 @@ const ADMIN_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
   ResearchStatus.DESIGN_APPROVED,
   ...LISTER_DOWNLOAD_STATUSES,
 ]);
+
+const LISTER_DETAIL_STATUSES = new Set<ResearchStatus>(
+  LISTER_QUEUE_ACTIVE_STATUSES
+);
 
 export const safeListerWorkQueueSelect = {
   id: true,
@@ -59,7 +64,9 @@ export const safeListerWorkQueueSelect = {
         },
         take: 1,
         select: {
+          id: true,
           imageUrl: true,
+          imageDeletedAt: true,
           roundNumber: true,
           approvedAt: true,
         },
@@ -127,7 +134,10 @@ export const getListerWorkQueue = async (
     const rawPreview = assignment.researchItem.reviewSubmissions[0] ?? null;
     const preview = rawPreview && rawPreview.approvedAt
       ? {
-          imageUrl: rawPreview.imageUrl,
+          reviewId: rawPreview.id,
+          imageUrl:
+            rawPreview.imageDeletedAt === null ? rawPreview.imageUrl : null,
+          imageDeletedAt: rawPreview.imageDeletedAt,
           roundNumber: rawPreview.roundNumber,
           approvedAt: rawPreview.approvedAt,
         }
@@ -168,6 +178,150 @@ export const getListerWorkQueue = async (
       total,
       totalPages,
     },
+  };
+};
+
+// Retrieves active listing detail only for the current assigned lister.
+export const getListerListingDetail = async (
+  workspaceId: string,
+  researchItemId: string,
+  listerId: string
+): Promise<ListerListingDetailResult> => {
+  const researchItem = await prisma.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      etsyListingId: true,
+      title: true,
+      originalUrl: true,
+      normalizedUrl: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      designAssignments: {
+        where: { isCurrent: true },
+        orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+        take: 1,
+        select: {
+          designer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+      listingAssignments: {
+        where: { isCurrent: true },
+        orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+        take: 1,
+        select: {
+          id: true,
+          listerId: true,
+          assignedAt: true,
+          startedAt: true,
+          completedAt: true,
+          isCurrent: true,
+        },
+      },
+      reviewSubmissions: {
+        where: { approvedAt: { not: null } },
+        orderBy: [{ roundNumber: "desc" }, { id: "desc" }],
+        take: 1,
+        select: {
+          id: true,
+          roundNumber: true,
+          imageUrl: true,
+          imageDeletedAt: true,
+          approvedAt: true,
+        },
+      },
+      finalAssets: {
+        orderBy: [{ uploadedAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          fileName: true,
+          fileSize: true,
+          mimeType: true,
+          uploadedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!researchItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  const listingAssignment = researchItem.listingAssignments[0] ?? null;
+  if (!listingAssignment) {
+    throw new ApiError(409, "No active assignment found for this research item");
+  }
+
+  if (listingAssignment.listerId !== listerId) {
+    throw new ApiError(403, "You are not assigned to this research item");
+  }
+
+  if (!LISTER_DETAIL_STATUSES.has(researchItem.status)) {
+    throw new ApiError(
+      409,
+      `Listing detail is not available for research item with status ${researchItem.status}`
+    );
+  }
+
+  const rawApprovedPreview = researchItem.reviewSubmissions[0] ?? null;
+  const approvedPreview = rawApprovedPreview?.approvedAt
+    ? {
+        reviewId: rawApprovedPreview.id,
+        roundNumber: rawApprovedPreview.roundNumber,
+        imageUrl:
+          rawApprovedPreview.imageDeletedAt === null
+            ? rawApprovedPreview.imageUrl
+            : null,
+        imageDeletedAt: rawApprovedPreview.imageDeletedAt,
+        approvedAt: rawApprovedPreview.approvedAt,
+      }
+    : null;
+
+  return {
+    researchItem: {
+      id: researchItem.id,
+      etsyListingId: researchItem.etsyListingId,
+      title: researchItem.title,
+      originalUrl: researchItem.originalUrl,
+      normalizedUrl: researchItem.normalizedUrl,
+      status: researchItem.status,
+      createdAt: researchItem.createdAt,
+      updatedAt: researchItem.updatedAt,
+    },
+    creator: researchItem.createdBy,
+    designer: researchItem.designAssignments[0]?.designer ?? null,
+    listingAssignment: {
+      id: listingAssignment.id,
+      assignedAt: listingAssignment.assignedAt,
+      startedAt: listingAssignment.startedAt,
+      completedAt: listingAssignment.completedAt,
+      isCurrent: listingAssignment.isCurrent,
+    },
+    approvedPreview,
+    finalAssets: researchItem.finalAssets.map((asset) => ({
+      id: asset.id,
+      fileName: asset.fileName,
+      fileSize: asset.fileSize.toString(),
+      mimeType: asset.mimeType,
+      uploadedAt: asset.uploadedAt,
+    })),
   };
 };
 

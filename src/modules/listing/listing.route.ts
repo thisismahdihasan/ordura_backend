@@ -7,6 +7,7 @@ import {
   backfillListingAssignments,
   completeListing,
   downloadFinalAsset,
+  getListerListingDetail,
   getListerWorkQueue,
   startListing,
 } from "./listing.controller.js";
@@ -27,6 +28,13 @@ listingRouter.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.LISTER),
   catchAsync(downloadFinalAsset)
+);
+
+listingRouter.get(
+  "/:researchItemId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.LISTER),
+  catchAsync(getListerListingDetail)
 );
 
 listingRouter.post(

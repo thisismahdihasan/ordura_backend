@@ -38,7 +38,9 @@ export type ListerQueueResearchItem = {
 };
 
 export type ListerQueuePreview = {
-  imageUrl: string;
+  reviewId: string;
+  imageUrl: string | null;
+  imageDeletedAt: Date | null;
   roundNumber: number;
   approvedAt: Date;
 } | null;
@@ -69,6 +71,52 @@ export type PaginationMeta = {
 export type ListerWorkQueueResult = {
   items: ListerWorkQueueItem[];
   pagination: PaginationMeta;
+};
+
+export type ListingUserSummary = {
+  id: string;
+  name: string | null;
+  email: string;
+};
+
+export type ListingApprovedPreview = {
+  reviewId: string;
+  roundNumber: number;
+  imageUrl: string | null;
+  imageDeletedAt: Date | null;
+  approvedAt: Date;
+} | null;
+
+export type ListingDetailFinalAsset = {
+  id: string;
+  fileName: string;
+  fileSize: string;
+  mimeType: string;
+  uploadedAt: Date;
+};
+
+export type ListerListingDetailResult = {
+  researchItem: {
+    id: string;
+    etsyListingId: string;
+    title: string | null;
+    originalUrl: string;
+    normalizedUrl: string;
+    status: ResearchStatus;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  creator: ListingUserSummary;
+  designer: ListingUserSummary | null;
+  listingAssignment: {
+    id: string;
+    assignedAt: Date;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    isCurrent: boolean;
+  };
+  approvedPreview: ListingApprovedPreview;
+  finalAssets: ListingDetailFinalAsset[];
 };
 
 export type StartListingResult = {

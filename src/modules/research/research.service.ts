@@ -309,6 +309,24 @@ const safeResearchItemDetailSelect = {
   },
 } as const;
 
+const assertCurrentListingAssignmentOwnership = async (
+  researchItemId: string,
+  userId: string
+): Promise<void> => {
+  const assignment = await prisma.listingAssignment.findFirst({
+    where: {
+      researchItemId,
+      listerId: userId,
+      isCurrent: true,
+    },
+    select: { id: true },
+  });
+
+  if (!assignment) {
+    throw new ApiError(403, "You are not assigned to this research item");
+  }
+};
+
 // Returns a paginated list of workspace research items matching creator, status, date, or search filters.
 export const getResearchItems = async (
   workspaceId: string,
@@ -506,7 +524,9 @@ export const getResearchReviewActivityMap = async (
 // Fetches details for a single research item scoped strictly to the specified workspace.
 export const getResearchItemById = async (
   workspaceId: string,
-  researchItemId: string
+  researchItemId: string,
+  userId: string,
+  roles: readonly WorkspaceRole[]
 ): Promise<ResearchItemDetailResult> => {
   const researchItem = await prisma.researchItem.findFirst({
     where: {
@@ -518,6 +538,15 @@ export const getResearchItemById = async (
 
   if (!researchItem) {
     throw new ApiError(404, "Research item not found");
+  }
+
+  const hasBroaderResearchAccess =
+    roles.includes(WorkspaceRole.ADMIN) ||
+    roles.includes(WorkspaceRole.RESEARCHER) ||
+    roles.includes(WorkspaceRole.DESIGNER);
+
+  if (roles.includes(WorkspaceRole.LISTER) && !hasBroaderResearchAccess) {
+    await assertCurrentListingAssignmentOwnership(researchItemId, userId);
   }
 
   const currentAssignment = researchItem.designAssignments[0] ?? null;
@@ -622,13 +651,16 @@ export const getAuthorizedReferenceImageData = async (
   const hasResearchManagementRole =
     roles.includes(WorkspaceRole.ADMIN) ||
     roles.includes(WorkspaceRole.RESEARCHER);
-  const isDesignerOnly =
+  const hasCurrentDesignerAccess =
     roles.includes(WorkspaceRole.DESIGNER) &&
-    !hasResearchManagementRole &&
-    !roles.includes(WorkspaceRole.LISTER);
+    item.designAssignments[0]?.designerId === userId;
 
-  if (isDesignerOnly && item.designAssignments[0]?.designerId !== userId) {
-    throw new ApiError(403, "You are not assigned to this research item");
+  if (!hasResearchManagementRole && !hasCurrentDesignerAccess) {
+    if (roles.includes(WorkspaceRole.LISTER)) {
+      await assertCurrentListingAssignmentOwnership(researchItemId, userId);
+    } else {
+      throw new ApiError(403, "You are not assigned to this research item");
+    }
   }
 
   if (!item.referenceImageUrl || item.referenceImageUrl.trim() === "") {

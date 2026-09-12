@@ -74,11 +74,17 @@ export const getResearchItemById = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
   const { workspaceId, researchItemId } = getResearchItemParamsSchema.parse(
     req.params
   );
 
-  const researchItem = await researchService.getResearchItemById(workspaceId, researchItemId);
+  const researchItem = await researchService.getResearchItemById(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    authReq.workspaceMembership.roles
+  );
 
   ApiResponse.success(res, {
     statusCode: 200,

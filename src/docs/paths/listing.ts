@@ -19,7 +19,40 @@ export const listingPaths: OpenApiPathMap = {
       tags: ["Listing"], summary: "Get the current lister's active queue", security: [{ cookieAuth: [] }],
       description: "LISTER only. Status filter accepts only READY_FOR_LISTING and LISTING_IN_PROGRESS; no completed/history queue exists.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/Limit" }, { name: "search", in: "query", schema: { type: "string", maxLength: 100 } }, { name: "status", in: "query", schema: { type: "string", enum: ["READY_FOR_LISTING", "LISTING_IN_PROGRESS"] } }],
-      responses: { "200": jsonSuccess("Lister work queue retrieved successfully.", { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { type: "object", required: ["assignmentId", "assignedAt", "startedAt", "researchItem", "preview", "finalAssets"], properties: { assignmentId: { type: "string" }, assignedAt: { type: "string", format: "date-time" }, startedAt: { type: "string", format: "date-time", nullable: true }, researchItem: { allOf: [{ $ref: "#/components/schemas/ResearchItemSafe" }, { type: "object", required: ["createdBy"], properties: { createdBy: { $ref: "#/components/schemas/CreatedBySummary" } } }] }, preview: { type: "object", nullable: true, required: ["imageUrl", "roundNumber", "approvedAt"], properties: { imageUrl: { type: "string", format: "uri" }, roundNumber: { type: "integer" }, approvedAt: { type: "string", format: "date-time" } } }, finalAssets: { type: "array", items: { $ref: "#/components/schemas/SafeFinalAsset" } } } } }, pagination: { $ref: "#/components/schemas/Pagination" } } }), "400": jsonError("Invalid queue query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role is required.") },
+      responses: { "200": jsonSuccess("Lister work queue retrieved successfully.", { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { type: "object", required: ["assignmentId", "assignedAt", "startedAt", "researchItem", "preview", "finalAssets"], properties: { assignmentId: { type: "string" }, assignedAt: { type: "string", format: "date-time" }, startedAt: { type: "string", format: "date-time", nullable: true }, researchItem: { $ref: "#/components/schemas/ListerQueueResearchItem" }, preview: { $ref: "#/components/schemas/ListingApprovedPreview" }, finalAssets: { type: "array", items: { $ref: "#/components/schemas/SafeFinalAsset" } } } } }, pagination: { $ref: "#/components/schemas/Pagination" } } }), "400": jsonError("Invalid queue query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role is required.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/listing/{researchItemId}": {
+    get: {
+      tags: ["Listing"],
+      summary: "Get current Lister-owned active listing detail",
+      security: [{ cookieAuth: [] }],
+      description: "Explicit LISTER role and current ListingAssignment ownership are required. Only READY_FOR_LISTING and LISTING_IN_PROGRESS items are readable.",
+      parameters: itemParameters,
+      responses: {
+        "200": jsonSuccess("Listing detail retrieved successfully.", {
+          type: "object",
+          required: [
+            "researchItem", "creator", "designer", "listingAssignment",
+            "approvedPreview", "finalAssets",
+          ],
+          properties: {
+            researchItem: { $ref: "#/components/schemas/ListingDetailResearchItem" },
+            creator: { $ref: "#/components/schemas/CreatedBySummary" },
+            designer: { $ref: "#/components/schemas/NullableUserSummary" },
+            listingAssignment: { $ref: "#/components/schemas/ListingAssignmentDetail" },
+            approvedPreview: { $ref: "#/components/schemas/ListingApprovedPreview" },
+            finalAssets: {
+              type: "array",
+              items: { $ref: "#/components/schemas/ListingDetailFinalAsset" },
+            },
+          },
+        }),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Explicit LISTER role and current assignment ownership are required."),
+        "404": jsonError("Research item was not found in this workspace."),
+        "409": jsonError("The item has no current assignment or is not in an active listing state."),
+      },
     },
   },
   "/api/v1/workspaces/{workspaceId}/listing/backfill-assignments": {

@@ -161,7 +161,7 @@ export const researchPaths: OpenApiPathMap = {
     },
     get: {
       tags: ["Research"], summary: "List workspace research items", security: [{ cookieAuth: [] }],
-      description: "Any explicit workspace workflow role may read this list.",
+      description: "ADMIN, RESEARCHER, and DESIGNER may read this list. Listers use the assignment-owned listing queue instead.",
       parameters: [
         { $ref: "#/components/parameters/WorkspaceId" },
         { name: "createdBy", in: "query", schema: { type: "string", minLength: 1 } },
@@ -176,6 +176,7 @@ export const researchPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/research-items/{researchItemId}": {
     get: {
       tags: ["Research"], summary: "Get one workspace research item", security: [{ cookieAuth: [] }], parameters: workspaceAndResearchParameters,
+      description: "ADMIN, RESEARCHER, and DESIGNER retain existing workspace access. LISTER-only callers must own the current ListingAssignment for this research item.",
       responses: { "200": jsonSuccess("Research item retrieved successfully.", { type: "object", required: ["researchItem"], properties: { researchItem: researchDetailItem } }), "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Research item was not found.") },
     },
     patch: {
@@ -285,7 +286,7 @@ export const researchPaths: OpenApiPathMap = {
     },
     get: {
       tags: ["Research"], summary: "Proxy a research reference image", security: [{ cookieAuth: [] }],
-      description: "Returns a protected binary image. ADMIN and RESEARCHER retain research-management access; DESIGNER-only users must be the current assigned designer. LISTER behavior remains the existing workspace-role contract. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
+      description: "Returns a protected binary image. ADMIN and RESEARCHER retain research-management access; DESIGNER callers must own the current design assignment unless another broader role applies; LISTER callers must own the current listing assignment unless another authorized role applies. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
       parameters: [...workspaceAndResearchParameters, { name: "download", in: "query", schema: { type: "string", enum: ["true", "false", "1", "0"] } }],
       responses: { "200": { description: "Image stream with image Content-Type and Content-Disposition.", headers: { "Content-Disposition": { schema: { type: "string" } }, "Cache-Control": { schema: { type: "string" } } }, content: { "image/*": { schema: { type: "string", format: "binary" } } } }, "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Item or reference image was not found."), "502": jsonError("Reference image could not be safely loaded."), "504": jsonError("Reference image request timed out.") },
     },

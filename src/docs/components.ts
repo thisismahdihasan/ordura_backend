@@ -239,6 +239,85 @@ export const openApiComponents = {
         mimeType: { type: "string" },
       },
     },
+    ListerQueueResearchItem: {
+      type: "object",
+      required: [
+        "id", "etsyListingId", "originalUrl", "normalizedUrl", "title",
+        "referenceImageUrl", "status", "createdAt", "createdBy",
+      ],
+      properties: {
+        id: stringId,
+        etsyListingId: { type: "string" },
+        originalUrl: { type: "string", format: "uri" },
+        normalizedUrl: { type: "string", format: "uri" },
+        title: { type: "string", nullable: true },
+        referenceImageUrl: { type: "string", format: "uri", nullable: true },
+        status: {
+          type: "string",
+          enum: ["READY_FOR_LISTING", "LISTING_IN_PROGRESS"],
+        },
+        createdAt: dateTime,
+        createdBy: { $ref: "#/components/schemas/CreatedBySummary" },
+      },
+    },
+    ListingDetailResearchItem: {
+      type: "object",
+      required: [
+        "id", "etsyListingId", "title", "originalUrl", "normalizedUrl",
+        "status", "createdAt", "updatedAt",
+      ],
+      properties: {
+        id: stringId,
+        etsyListingId: { type: "string" },
+        title: { type: "string", nullable: true },
+        originalUrl: { type: "string", format: "uri" },
+        normalizedUrl: { type: "string", format: "uri" },
+        status: {
+          type: "string",
+          enum: ["READY_FOR_LISTING", "LISTING_IN_PROGRESS"],
+        },
+        createdAt: dateTime,
+        updatedAt: dateTime,
+      },
+    },
+    ListingAssignmentDetail: {
+      type: "object",
+      required: [
+        "id", "assignedAt", "startedAt", "completedAt", "isCurrent",
+      ],
+      properties: {
+        id: stringId,
+        assignedAt: dateTime,
+        startedAt: { ...dateTime, nullable: true },
+        completedAt: { ...dateTime, nullable: true },
+        isCurrent: { type: "boolean", enum: [true] },
+      },
+    },
+    ListingApprovedPreview: {
+      type: "object",
+      nullable: true,
+      required: [
+        "reviewId", "roundNumber", "imageUrl", "imageDeletedAt", "approvedAt",
+      ],
+      properties: {
+        reviewId: stringId,
+        roundNumber: { type: "integer" },
+        imageUrl: { type: "string", format: "uri", nullable: true },
+        imageDeletedAt: { ...dateTime, nullable: true },
+        approvedAt: dateTime,
+      },
+    },
+    ListingDetailFinalAsset: {
+      type: "object",
+      required: ["id", "fileName", "fileSize", "mimeType", "uploadedAt"],
+      properties: {
+        id: stringId,
+        fileName: { type: "string" },
+        fileSize: { type: "string", pattern: "^\\d+$", description: "Decimal byte count." },
+        mimeType: { type: "string" },
+        uploadedAt: dateTime,
+      },
+    },
     Notification: {
       type: "object",
       required: ["id", "type", "title", "message", "researchItemId", "workspaceId", "isRead", "createdAt"],

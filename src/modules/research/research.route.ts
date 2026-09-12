@@ -39,8 +39,7 @@ router.get(
   requireWorkspaceRole(
     WorkspaceRole.ADMIN,
     WorkspaceRole.RESEARCHER,
-    WorkspaceRole.DESIGNER,
-    WorkspaceRole.LISTER
+    WorkspaceRole.DESIGNER
   ),
   catchAsync(getResearchItems)
 );
