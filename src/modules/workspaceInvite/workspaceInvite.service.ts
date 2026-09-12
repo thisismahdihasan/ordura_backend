@@ -1,6 +1,7 @@
 import { Prisma, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
+import { backfillUnassignedListings } from "../listing/listing.service.js";
 import { assignUnassignedResearchBacklog } from "../research/research.assignment.js";
 import {
   getMailTransportErrorDetails,
@@ -653,6 +654,24 @@ export const acceptWorkspaceInvite = async (
     } catch (syncError) {
       console.warn(
         "Backlog assignment sync failed after Designer joined workspace. " +
+        "Membership accepted successfully. Admin can recover via manual sync.",
+        {
+          workspaceId: acceptResult.membership.workspaceId,
+          userId: acceptResult.membership.userId,
+          error: syncError instanceof Error ? syncError.message : String(syncError),
+        }
+      );
+    }
+  }
+
+  // Trigger listing backlog recovery if the new member has an explicit LISTER role.
+  // This is isolated after membership commit and never redistributes current assignments.
+  if (acceptResult.membership.roles.includes(WorkspaceRole.LISTER)) {
+    try {
+      await backfillUnassignedListings(acceptResult.membership.workspaceId);
+    } catch (syncError) {
+      console.warn(
+        "Listing backlog sync failed after Lister joined workspace. " +
         "Membership accepted successfully. Admin can recover via manual sync.",
         {
           workspaceId: acceptResult.membership.workspaceId,
