@@ -155,6 +155,7 @@ export const assignLeastWorkloadLister = async (
   // 6. Create exactly one in-app notification for the newly assigned lister
   await tx.notification.create({
     data: {
+      workspaceId,
       userId: chosenListerId,
       type: NOTIFICATION_TYPE_LISTING_ASSIGNED,
       title: "New Design Ready for Listing",

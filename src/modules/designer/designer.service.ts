@@ -590,6 +590,7 @@ export const reportAssignedDesignIssue = async (
     // 9. Atomically create notifications for all admin recipients
     await tx.notification.createMany({
       data: adminMembers.map((admin) => ({
+        workspaceId,
         userId: admin.userId,
         type: NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED,
         title: "Design Issue Reported",
@@ -778,6 +779,7 @@ export const submitAssignedDesignReview = async (
         // Step G: Create in-app notifications for all workspace admins
         await tx.notification.createMany({
           data: adminMembers.map((admin) => ({
+            workspaceId,
             userId: admin.userId,
             type: NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED,
             title: "Design Submitted for Review",

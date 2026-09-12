@@ -326,7 +326,7 @@ export const openApiComponents = {
         type: { type: "string", enum: ["DESIGN_ASSIGNED", "DESIGN_ISSUE_REPORTED", "DESIGN_REVIEW_SUBMITTED", "DESIGN_CORRECTION_REQUESTED", "DESIGN_APPROVED", "LISTING_ASSIGNED"] },
         title: { type: "string" }, message: { type: "string" },
         researchItemId: { type: "string", nullable: true },
-        workspaceId: { type: "string", nullable: true },
+        workspaceId: { type: "string" },
         isRead: { type: "boolean" }, createdAt: dateTime,
       },
     },

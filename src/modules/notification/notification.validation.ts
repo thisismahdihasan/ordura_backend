@@ -7,8 +7,17 @@ export const getNotificationsQuerySchema = z.object({
 
 export type GetNotificationsQueryInput = z.infer<typeof getNotificationsQuerySchema>;
 
-export const markNotificationReadParamsSchema = z.object({
-  notificationId: z.string().trim().min(1, "notificationId is required"),
-}).strict();
+export const notificationWorkspaceParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+  })
+  .strict();
+
+export const markNotificationReadParamsSchema = z
+  .object({
+    notificationId: z.string().trim().min(1, "notificationId is required"),
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+  })
+  .strict();
 
 export const emptyNotificationBodySchema = z.object({}).strict().default({});

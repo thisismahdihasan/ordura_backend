@@ -180,6 +180,7 @@ export const assignUnassignedResearchBacklog = async (
           // Notify the Designer. Committed atomically with the assignment and status change.
           await tx.notification.create({
             data: {
+              workspaceId,
               userId: designerId,
               type: NOTIFICATION_TYPE_DESIGN_ASSIGNED,
               title: "Design Assigned",

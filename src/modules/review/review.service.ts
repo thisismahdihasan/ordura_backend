@@ -695,6 +695,7 @@ export const requestReviewCorrection = async (
       // 8. Create exactly one notification for the current assigned designer
       await tx.notification.create({
         data: {
+          workspaceId,
           userId: currentAssignment.designerId,
           type: NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED,
           title: "Correction Requested",
@@ -930,6 +931,7 @@ export const approveReviewSubmission = async (
       // 9. Create exactly one notification for the current assigned designer
       await tx.notification.create({
         data: {
+          workspaceId,
           userId: currentAssignment.designerId,
           type: NOTIFICATION_TYPE_DESIGN_APPROVED,
           title: "Design Approved",

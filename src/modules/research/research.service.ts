@@ -146,7 +146,14 @@ export const createResearchItem = async (
           select: { id: true },
         });
         await tx.notification.create({
-          data: { userId: chosenDesignerId, type: NOTIFICATION_TYPE_DESIGN_ASSIGNED, title: "Design Assigned", message: "You have been assigned a new design.", researchItemId: item.id },
+          data: {
+            workspaceId,
+            userId: chosenDesignerId,
+            type: NOTIFICATION_TYPE_DESIGN_ASSIGNED,
+            title: "Design Assigned",
+            message: "You have been assigned a new design.",
+            researchItemId: item.id,
+          },
         });
       }
 
@@ -784,7 +791,14 @@ export const reassignResearchDesigner = async (
       },
     });
     await tx.notification.create({
-      data: { userId: designerId, type: NOTIFICATION_TYPE_DESIGN_ASSIGNED, title: "Design Assigned", message: "You have been assigned a new design.", researchItemId },
+      data: {
+        workspaceId,
+        userId: designerId,
+        type: NOTIFICATION_TYPE_DESIGN_ASSIGNED,
+        title: "Design Assigned",
+        message: "You have been assigned a new design.",
+        researchItemId,
+      },
     });
 
     // 9. Status transition logic

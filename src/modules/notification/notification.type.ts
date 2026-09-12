@@ -4,7 +4,7 @@ export type NotificationListItem = {
   title: string;
   message: string;
   researchItemId: string | null;
-  workspaceId: string | null;
+  workspaceId: string;
   isRead: boolean;
   createdAt: Date;
 };

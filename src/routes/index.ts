@@ -3,7 +3,6 @@ import { HealthRoutes } from "../modules/health/health.route.js";
 import { AuthRoutes } from "../modules/auth/auth.route.js";
 import { WorkspaceRoutes } from "../modules/workspace/workspace.route.js";
 import { WorkspaceInviteRoutes } from "../modules/workspaceInvite/workspaceInvite.route.js";
-import { NotificationRoutes } from "../modules/notification/notification.route.js";
 import { SystemRoutes } from "../modules/system/system.route.js";
 
 const router: Router = express.Router();
@@ -29,10 +28,6 @@ const moduleRoutes: ModuleRoute[] = [
   {
     path: "/workspace/invites",
     route: WorkspaceInviteRoutes,
-  },
-  {
-    path: "/notifications",
-    route: NotificationRoutes,
   },
   {
     path: "/system",

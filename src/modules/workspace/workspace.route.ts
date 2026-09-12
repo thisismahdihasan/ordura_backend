@@ -19,6 +19,7 @@ import { DesignerRoutes, DesignRoutes } from "../designer/designer.route.js";
 import { ReviewRoutes, AnnotationRoutes } from "../review/review.route.js";
 import { ListerRoutes, ListingRoutes } from "../listing/listing.route.js";
 import { DashboardRoutes } from "../dashboard/dashboard.route.js";
+import { NotificationRoutes } from "../notification/notification.route.js";
 
 const router: Router = Router();
 
@@ -61,6 +62,7 @@ router.use("/:workspaceId/reviews", ReviewRoutes);
 router.use("/:workspaceId/annotations", AnnotationRoutes);
 router.use("/:workspaceId/lister", ListerRoutes);
 router.use("/:workspaceId/listing", ListingRoutes);
+router.use("/:workspaceId/notifications", NotificationRoutes);
 router.use("/:workspaceId/admin", DashboardRoutes);
 
 export const WorkspaceRoutes = router;
