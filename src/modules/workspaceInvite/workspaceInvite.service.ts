@@ -21,6 +21,10 @@ import {
 
 const INVITE_EXPIRY_HOURS = 24;
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
+const INVITE_DB_TRANSACTION_OPTIONS = {
+  maxWait: 30_000,
+  timeout: 60_000,
+} as const;
 
 const safeWorkspaceInviteSelect = {
   id: true,
@@ -68,6 +72,34 @@ const pendingInviteSelect = {
 } as const;
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+const acquireInviteCreateLock = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  normalizedEmail: string
+): Promise<void> => {
+  const lockScope = `${workspaceId}:${normalizedEmail}`;
+
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtext('workspace_invite_create'),
+      hashtext(${lockScope})
+    )
+  `;
+};
+
+const lockWorkspaceInvite = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  inviteId: string
+): Promise<void> => {
+  await tx.$executeRaw`
+    SELECT id
+    FROM "WorkspaceInvite"
+    WHERE id = ${inviteId} AND "workspaceId" = ${workspaceId}
+    FOR UPDATE
+  `;
+};
 
 const maskRecipient = (email: string): string => {
   const normalizedEmail = normalizeEmail(email);
@@ -271,62 +303,77 @@ export const createWorkspaceInvite = async (
     }
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email: input.email },
-    select: { id: true },
-  });
+  const normalizedEmail = normalizeEmail(input.email);
+  const { invite, rawToken } = await prisma.$transaction(
+    async (tx) => {
+      await acquireInviteCreateLock(tx, workspaceId, normalizedEmail);
 
-  if (existingUser) {
-    const existingMember = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
+      const existingUser = await tx.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      });
+
+      if (existingUser) {
+        const existingMember = await tx.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId,
+              userId: existingUser.id,
+            },
+          },
+          select: { id: true },
+        });
+
+        if (existingMember) {
+          throw new ApiError(409, "User is already a member of this workspace");
+        }
+      }
+
+      const activeInvite = await tx.workspaceInvite.findFirst({
+        where: {
           workspaceId,
-          userId: existingUser.id,
+          email: normalizedEmail,
+          acceptedAt: null,
+          expiresAt: { gt: new Date() },
         },
-      },
-      select: { id: true },
-    });
+        select: { id: true },
+      });
 
-    if (existingMember) {
-      throw new ApiError(409, "User is already a member of this workspace");
-    }
-  }
+      if (activeInvite) {
+        throw new ApiError(409, "An active invitation already exists for this email");
+      }
 
-  const activeInvite = await prisma.workspaceInvite.findFirst({
-    where: {
-      workspaceId,
-      email: input.email,
-      acceptedAt: null,
-      expiresAt: { gt: new Date() },
+      const nextRawToken = generateInviteToken();
+      const tokenHash = hashInviteToken(nextRawToken);
+      const expiresAt = new Date(
+        Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
+      );
+
+      const createdInvite = await tx.workspaceInvite.create({
+        data: {
+          workspaceId,
+          email: normalizedEmail,
+          roles: input.roles,
+          tokenHash,
+          expiresAt,
+          acceptedAt: null,
+          invitedById: callerUserId,
+        },
+        select: safeWorkspaceInviteSelect,
+      });
+
+      return {
+        invite: createdInvite,
+        rawToken: nextRawToken,
+      };
     },
-    select: { id: true },
-  });
-
-  if (activeInvite) {
-    throw new ApiError(409, "An active invitation already exists for this email");
-  }
-
-  const rawToken = generateInviteToken();
-  const tokenHash = hashInviteToken(rawToken);
-  const expiresAt = new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
-
-  const invite = await prisma.workspaceInvite.create({
-    data: {
-      workspaceId,
-      email: input.email,
-      roles: input.roles,
-      tokenHash,
-      expiresAt,
-      acceptedAt: null,
-      invitedById: callerUserId,
-    },
-    select: safeWorkspaceInviteSelect,
-  });
+    INVITE_DB_TRANSACTION_OPTIONS
+  );
 
   let evidence: MailSendEvidence;
   try {
     evidence = await sendWorkspaceInvitationEmail({
-      email: input.email,
+      email: normalizedEmail,
       rawToken,
       roles: input.roles,
       workspaceName,
@@ -334,7 +381,7 @@ export const createWorkspaceInvite = async (
   } catch (error) {
     logInviteMailFailure({
       action: "initial",
-      email: input.email,
+      email: normalizedEmail,
       error,
       inviteId: invite.id,
       workspaceId,
@@ -398,99 +445,121 @@ export const resendWorkspaceInvite = async (
   inviteId: string
 ): Promise<ResendWorkspaceInviteResult> => {
   const workspace = await getAdminWorkspace(callerUserId, workspaceId);
-  const invite = await prisma.workspaceInvite.findFirst({
-    where: {
-      id: inviteId,
-      workspaceId: workspace.id,
-    },
-    select: recoveryInviteSelect,
-  });
+  let mailWasSubmitted = false;
 
-  if (!invite) {
-    throw new ApiError(404, "Workspace invitation was not found");
-  }
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await lockWorkspaceInvite(tx, workspace.id, inviteId);
 
-  if (invite.acceptedAt !== null) {
-    throw new ApiError(409, "Accepted workspace invitations cannot be resent");
-  }
+        const invite = await tx.workspaceInvite.findFirst({
+          where: {
+            id: inviteId,
+            workspaceId: workspace.id,
+          },
+          select: recoveryInviteSelect,
+        });
 
-  const now = new Date();
-  const cooldownEndsAt = invite.lastSentAt
-    ? invite.lastSentAt.getTime() + RESEND_COOLDOWN_MS
-    : 0;
+        if (!invite) {
+          throw new ApiError(404, "Workspace invitation was not found");
+        }
 
-  if (cooldownEndsAt > now.getTime()) {
-    const retryAfterSeconds = Math.ceil((cooldownEndsAt - now.getTime()) / 1000);
-    throw new ApiError(
-      429,
-      "Workspace invitation resend is cooling down",
-      true,
-      "",
-      { retryAfterSeconds }
+        if (invite.acceptedAt !== null) {
+          throw new ApiError(409, "Accepted workspace invitations cannot be resent");
+        }
+
+        const now = new Date();
+        const cooldownEndsAt = invite.lastSentAt
+          ? invite.lastSentAt.getTime() + RESEND_COOLDOWN_MS
+          : 0;
+
+        if (cooldownEndsAt > now.getTime()) {
+          const retryAfterSeconds = Math.ceil(
+            (cooldownEndsAt - now.getTime()) / 1000
+          );
+          throw new ApiError(
+            429,
+            "Workspace invitation resend is cooling down",
+            true,
+            "",
+            { retryAfterSeconds }
+          );
+        }
+
+        const rawToken = generateInviteToken();
+        const tokenHash = hashInviteToken(rawToken);
+        const expiresAt = new Date(
+          now.getTime() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
+        );
+        let evidence: MailSendEvidence;
+
+        try {
+          evidence = await sendWorkspaceInvitationEmail({
+            email: invite.email,
+            rawToken,
+            roles: invite.roles,
+            workspaceName: invite.workspace.name,
+          });
+          mailWasSubmitted = true;
+        } catch (error) {
+          logInviteMailFailure({
+            action: "resend",
+            email: invite.email,
+            error,
+            inviteId: invite.id,
+            workspaceId: workspace.id,
+          });
+          throw new ApiError(502, "Failed to resend workspace invitation email");
+        }
+
+        const updateResult = await tx.workspaceInvite.updateMany({
+          where: {
+            id: invite.id,
+            workspaceId: workspace.id,
+            tokenHash: invite.tokenHash,
+            acceptedAt: null,
+          },
+          data: {
+            tokenHash,
+            expiresAt,
+            ...sendEvidenceData(evidence, now),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          console.error(
+            "Invite email was submitted but resend finalization lost the invite state",
+            {
+              inviteId: invite.id,
+              workspaceId: workspace.id,
+            }
+          );
+          throw new ApiError(409, "Workspace invitation state changed while resending");
+        }
+
+        const resentInvite = await tx.workspaceInvite.findUniqueOrThrow({
+          where: { id: invite.id },
+          select: safeWorkspaceInviteSelect,
+        });
+
+        return { invite: resentInvite };
+      },
+      INVITE_DB_TRANSACTION_OPTIONS
     );
-  }
-
-  const rawToken = generateInviteToken();
-  const tokenHash = hashInviteToken(rawToken);
-  const expiresAt = new Date(now.getTime() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
-  let evidence: MailSendEvidence;
-
-  try {
-    evidence = await sendWorkspaceInvitationEmail({
-      email: invite.email,
-      rawToken,
-      roles: invite.roles,
-      workspaceName: invite.workspace.name,
-    });
-  } catch (error) {
-    logInviteMailFailure({
-      action: "resend",
-      email: invite.email,
-      error,
-      inviteId: invite.id,
-      workspaceId: workspace.id,
-    });
-    throw new ApiError(502, "Failed to resend workspace invitation email");
-  }
-
-  try {
-    const updateResult = await prisma.workspaceInvite.updateMany({
-      where: {
-        id: invite.id,
-        workspaceId: workspace.id,
-        tokenHash: invite.tokenHash,
-        acceptedAt: null,
-      },
-      data: {
-        tokenHash,
-        expiresAt,
-        ...sendEvidenceData(evidence, now),
-      },
-    });
-
-    if (updateResult.count === 0) {
-      console.error("Invite email was submitted but resend finalization lost the invite state", {
-        inviteId: invite.id,
-        workspaceId: workspace.id,
-      });
-      throw new ApiError(409, "Workspace invitation state changed while resending");
-    }
-
-    const resentInvite = await prisma.workspaceInvite.findUniqueOrThrow({
-      where: { id: invite.id },
-      select: safeWorkspaceInviteSelect,
-    });
-
-    return { invite: resentInvite };
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
 
-    console.error("Invite email was submitted but resend evidence could not be persisted", {
-      inviteId: invite.id,
-      workspaceId: workspace.id,
-    });
+    console.error(
+      mailWasSubmitted
+        ? "Invite email was submitted but resend evidence could not be persisted"
+        : "Workspace invitation resend transaction failed before mail submission",
+      {
+        inviteId,
+        workspaceId: workspace.id,
+      }
+    );
     throw new ApiError(502, "Workspace invitation resend could not be finalized");
   }
 };
@@ -578,7 +647,7 @@ export const acceptWorkspaceInvite = async (
         throw new ApiError(410, "Invitation has expired");
       }
 
-      if (invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+      if (normalizeEmail(invite.email) !== normalizeEmail(userEmail)) {
         throw new ApiError(
           403,
           "This invitation was sent to a different email address"
@@ -602,6 +671,7 @@ export const acceptWorkspaceInvite = async (
       const updatedCount = await tx.workspaceInvite.updateMany({
         where: {
           id: invite.id,
+          tokenHash,
           acceptedAt: null,
         },
         data: {

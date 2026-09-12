@@ -13,6 +13,14 @@ export type BuiltInviteEmail = {
   html: string;
 };
 
+const escapeInviteHtmlText = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
 export const buildInviteUrl = (rawToken: string): string => {
   const baseUrl = env.FRONTEND_INVITE_URL.replace(/\/$/, "");
   return `${baseUrl}/${rawToken}`;
@@ -26,6 +34,7 @@ export const buildInviteEmail = ({
   const inviteUrl = buildInviteUrl(rawToken);
   const formattedRoles = roles.join(", ");
   const subject = `Invitation to join ${workspaceName} on StoreOps`;
+  const escapedWorkspaceName = escapeInviteHtmlText(workspaceName);
 
   const text = `You have been invited to join ${workspaceName} on StoreOps with the role(s): ${formattedRoles}.
 
@@ -40,11 +49,11 @@ If you were not expecting this invitation, you can safely ignore this email.`;
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${subject}</title>
+  <title>Invitation to join ${escapedWorkspaceName} on StoreOps</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <h2 style="color: #111;">You're invited to join ${workspaceName}</h2>
-  <p>You have been invited to join <strong>${workspaceName}</strong> on StoreOps with the following role(s):</p>
+  <h2 style="color: #111;">You're invited to join ${escapedWorkspaceName}</h2>
+  <p>You have been invited to join <strong>${escapedWorkspaceName}</strong> on StoreOps with the following role(s):</p>
   <p style="background: #f4f4f5; padding: 10px 14px; border-radius: 6px; font-weight: bold; display: inline-block;">
     ${formattedRoles}
   </p>
