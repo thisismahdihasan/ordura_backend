@@ -39,6 +39,36 @@ const adminWorkflowErrors = {
   "409": jsonError("Only the current DESIGN_REVIEW round allows this action."),
 };
 
+const correctionFeedbackRequiredError = {
+  description: "At least one correction annotation is required on the current review round.",
+  content: {
+    "application/json": {
+      schema: {
+        allOf: [
+          { $ref: "#/components/schemas/ApiError" },
+          {
+            type: "object",
+            required: ["data"],
+            properties: {
+              message: {
+                type: "string",
+                enum: ["Add at least one correction note before requesting changes."],
+              },
+              data: {
+                type: "object",
+                required: ["code"],
+                properties: {
+                  code: { type: "string", enum: ["CORRECTION_FEEDBACK_REQUIRED"] },
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  },
+};
+
 export const reviewPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/reviews": {
     get: {
@@ -68,8 +98,8 @@ export const reviewPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/reviews/{reviewId}/request-correction": {
     post: {
       tags: ["Reviews"], summary: "Request a correction for the current review", security: [{ cookieAuth: [] }],
-      description: "ADMIN only. DESIGN_REVIEW transitions to CORRECTION_NEEDED and the current designer is notified.", parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/ReviewId" }],
-      responses: { "200": jsonSuccess("Correction requested successfully.", { type: "object", required: ["researchItem"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { type: "string", enum: ["CORRECTION_NEEDED"] } } } } }), ...adminWorkflowErrors, "500": jsonError("Current design assignment invariant failed.") },
+      description: "ADMIN only. The latest DESIGN_REVIEW round must have at least one correction annotation before the item transitions to CORRECTION_NEEDED and the current designer is notified.", parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/ReviewId" }],
+      responses: { "200": jsonSuccess("Correction requested successfully.", { type: "object", required: ["researchItem"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { type: "string", enum: ["CORRECTION_NEEDED"] } } } } }), ...adminWorkflowErrors, "409": correctionFeedbackRequiredError, "500": jsonError("Current design assignment invariant failed.") },
     },
   },
   "/api/v1/workspaces/{workspaceId}/reviews/{reviewId}/approve": {

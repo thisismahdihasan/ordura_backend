@@ -631,7 +631,24 @@ export const requestReviewCorrection = async (
         );
       }
 
-      // 6. Concurrency gate: conditional atomic status transition on ResearchItem
+      // 6. Correction feedback requirement: the current round must have at least one actionable annotation.
+      const annotationCount = await tx.reviewAnnotation.count({
+        where: {
+          reviewSubmissionId: targetReview.id,
+        },
+      });
+
+      if (annotationCount === 0) {
+        throw new ApiError(
+          409,
+          "Add at least one correction note before requesting changes.",
+          true,
+          "",
+          { code: "CORRECTION_FEEDBACK_REQUIRED" }
+        );
+      }
+
+      // 7. Concurrency gate: conditional atomic status transition on ResearchItem
       const updatedItemResult = await tx.researchItem.updateMany({
         where: {
           id: targetReview.researchItemId,
@@ -651,7 +668,7 @@ export const requestReviewCorrection = async (
         );
       }
 
-      // 7. Post-gate race verification: re-verify latest review round and assignment ownership
+      // 8. Post-gate race verification: re-verify latest review round and assignment ownership
       const recheckLatest = await tx.reviewSubmission.findFirst({
         where: {
           researchItemId: targetReview.researchItemId,
