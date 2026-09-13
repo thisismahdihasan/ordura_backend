@@ -68,6 +68,12 @@ type RecentActivityInput = {
   }>;
 };
 
+type UserActivityIdentity = {
+  email: string;
+  id: string;
+  name: string | null;
+};
+
 function isActivityInRange(
   activityAt: Date | null,
   filter: ResolvedRangeWithFilter["filter"],
@@ -873,7 +879,7 @@ export const getUserActivity = async (
   userId: string,
   query: DashboardOverviewQueryInput
 ): Promise<UserActivityResult> => {
-  // 1. Verify target user is a member of the target workspace
+  // 1. Resolve either an active member or a historically evidenced former member.
   const member = await prisma.workspaceMember.findUnique({
     where: {
       workspaceId_userId: {
@@ -895,8 +901,52 @@ export const getUserActivity = async (
     },
   });
 
-  if (!member) {
-    throw new ApiError(404, "User not found in this workspace");
+  let identity: UserActivityIdentity;
+  let membershipStatus: "ACTIVE" | "REMOVED";
+  let roles: WorkspaceRole[];
+  let joinedAt: string | null;
+
+  if (member) {
+    identity = member.user;
+    membershipStatus = "ACTIVE";
+    roles = member.roles;
+    joinedAt = member.createdAt.toISOString();
+  } else {
+    const historicalEvidence = await prisma.researchItem.findFirst({
+      where: {
+        workspaceId,
+        OR: [
+          { createdById: userId },
+          { designAssignments: { some: { designerId: userId } } },
+          { reviewSubmissions: { some: { designerId: userId } } },
+          { listingAssignments: { some: { listerId: userId } } },
+          { listingResult: { is: { listedById: userId } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!historicalEvidence) {
+      throw new ApiError(404, "User not found in this workspace");
+    }
+
+    const historicalUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    if (!historicalUser) {
+      throw new ApiError(404, "User not found in this workspace");
+    }
+
+    identity = historicalUser;
+    membershipStatus = "REMOVED";
+    roles = [];
+    joinedAt = null;
   }
 
   const { dateRange, filter } = resolveDashboardDateRange(query);
@@ -1131,11 +1181,12 @@ export const getUserActivity = async (
   return {
     dateRange,
     user: {
-      id: member.user.id,
-      name: member.user.name,
-      email: member.user.email,
-      roles: member.roles,
-      joinedAt: member.createdAt.toISOString(),
+      id: identity.id,
+      name: identity.name,
+      email: identity.email,
+      roles,
+      membershipStatus,
+      joinedAt,
     },
     summary: {
       research: researchSummary,

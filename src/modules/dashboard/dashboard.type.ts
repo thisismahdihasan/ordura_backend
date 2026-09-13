@@ -102,6 +102,8 @@ export type UserActivitySummary = {
 
 export type UserActivityRecentItemRole = "RESEARCHER" | "DESIGNER" | "LISTER";
 
+export type UserActivityMembershipStatus = "ACTIVE" | "REMOVED";
+
 export type UserActivityRecentItem = {
   id: string;
   researchItemId: string;
@@ -116,7 +118,8 @@ export type UserActivityUserInfo = {
   name: string | null;
   email: string;
   roles: WorkspaceRole[];
-  joinedAt: string;
+  membershipStatus: UserActivityMembershipStatus;
+  joinedAt: string | null;
 };
 
 export type UserActivityResult = {
