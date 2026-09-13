@@ -26,14 +26,14 @@ const router: Router = Router({ mergeParams: true });
 router.post(
   "/preview",
   requireAuth,
-  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER),
+  requireWorkspaceRole(WorkspaceRole.RESEARCHER),
   catchAsync(previewResearchItem)
 );
 
 router.post(
   "/",
   requireAuth,
-  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER),
+  requireWorkspaceRole(WorkspaceRole.RESEARCHER),
   optionalReferenceImageUploadMiddleware,
   catchAsync(createResearchItem)
 );

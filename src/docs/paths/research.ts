@@ -82,7 +82,7 @@ export const researchPaths: OpenApiPathMap = {
       summary: "Preview Etsy listing metadata and duplicate status",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit ADMIN or RESEARCHER role required. Duplicate detection remains enforced. ADMIN responses include duplicate item metadata for workspace management; non-ADMIN responses return alreadyExists: true with duplicate: null and omit internal item, creator, status, and timestamp data.",
+        "Explicit RESEARCHER membership required. ADMIN alone may manage Research records but cannot preview or create them. Duplicate detection remains enforced. Callers who also hold ADMIN receive duplicate item metadata for workspace management; other callers receive alreadyExists: true with duplicate: null and omit internal item, creator, status, and timestamp data.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       requestBody: {
         required: true,
@@ -141,7 +141,7 @@ export const researchPaths: OpenApiPathMap = {
         }),
         "400": jsonError("Invalid Etsy listing URL."),
         "401": jsonError("Authentication is required."),
-        "403": jsonError("ADMIN or RESEARCHER role is required."),
+        "403": jsonError("RESEARCHER role is required."),
       },
     },
   },
@@ -151,7 +151,7 @@ export const researchPaths: OpenApiPathMap = {
       summary: "Create a research item from an Etsy listing",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit ADMIN or RESEARCHER role required. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409; detailed duplicate metadata is ADMIN-only and non-ADMIN callers receive only alreadyExists: true. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
+        "Explicit RESEARCHER membership required. ADMIN alone may manage Research records but cannot create them. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409; callers who also hold ADMIN receive detailed duplicate metadata and other callers receive only alreadyExists: true. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       requestBody: {
         required: true,
@@ -212,9 +212,9 @@ export const researchPaths: OpenApiPathMap = {
         }),
         "400": jsonError("Invalid Etsy listing URL."),
         "401": jsonError("Authentication is required."),
-        "403": jsonError("ADMIN or RESEARCHER role is required."),
+        "403": jsonError("RESEARCHER role is required."),
         "409": {
-          description: "The Etsy listing already exists in this workspace. ADMIN callers receive detailed duplicate metadata; non-ADMIN callers receive only alreadyExists: true.",
+          description: "The Etsy listing already exists in this workspace. Callers who also hold ADMIN receive detailed duplicate metadata; other callers receive only alreadyExists: true.",
           content: {
             "application/json": {
               schema: {
