@@ -71,8 +71,10 @@ export const createResearchItem = async (
   workspaceId: string,
   userId: string,
   input: CreateResearchItemInput,
+  actorRoles: readonly WorkspaceRole[],
   options?: CreateResearchItemOptions
 ): Promise<SafeResearchItem> => {
+  const isAdmin = actorRoles.includes(WorkspaceRole.ADMIN);
   const { originalUrl, normalizedUrl, etsyListingId } = extractEtsyListing(
     input.etsyUrl
   );
@@ -89,13 +91,15 @@ export const createResearchItem = async (
   });
 
   if (existingItem) {
-    const duplicateData: DuplicateResearchItemData = {
-      alreadyExists: true,
-      researchItemId: existingItem.id,
-      createdBy: existingItem.createdBy,
-      currentStatus: existingItem.status,
-      createdAt: existingItem.createdAt,
-    };
+    const duplicateData: DuplicateResearchItemData = isAdmin
+      ? {
+          alreadyExists: true,
+          researchItemId: existingItem.id,
+          createdBy: existingItem.createdBy,
+          currentStatus: existingItem.status,
+          createdAt: existingItem.createdAt,
+        }
+      : { alreadyExists: true };
 
     throw new ApiError(
       409,
@@ -238,17 +242,16 @@ export const createResearchItem = async (
         select: duplicateResearchItemSelect,
       });
 
-      const duplicateData: DuplicateResearchItemData = {
-        alreadyExists: true,
-        researchItemId: concurrentItem?.id ?? "",
-        createdBy: concurrentItem?.createdBy ?? {
-          id: "",
-          name: "",
-          email: "",
-        },
-        currentStatus: concurrentItem?.status ?? ResearchStatus.RESEARCHED,
-        createdAt: concurrentItem?.createdAt ?? new Date(),
-      };
+      const duplicateData: DuplicateResearchItemData =
+        isAdmin && concurrentItem
+          ? {
+              alreadyExists: true,
+              researchItemId: concurrentItem.id,
+              createdBy: concurrentItem.createdBy,
+              currentStatus: concurrentItem.status,
+              createdAt: concurrentItem.createdAt,
+            }
+          : { alreadyExists: true };
 
       throw new ApiError(
         409,
@@ -892,8 +895,10 @@ export const reassignResearchDesigner = async (
 export const previewResearchItem = async (
   workspaceId: string,
   input: PreviewResearchItemInput,
+  actorRoles: readonly WorkspaceRole[],
   options?: CreateResearchItemOptions
 ): Promise<ResearchPreviewResult> => {
+  const isAdmin = actorRoles.includes(WorkspaceRole.ADMIN);
   const { normalizedUrl, etsyListingId } = extractEtsyListing(input.etsyUrl);
 
   const existingItem = await prisma.researchItem.findUnique({
@@ -921,12 +926,14 @@ export const previewResearchItem = async (
       title: metadata.title,
       referenceImageUrl: metadata.referenceImageUrl,
       alreadyExists: true,
-      duplicate: {
-        researchItemId: existingItem.id,
-        createdBy: existingItem.createdBy,
-        currentStatus: existingItem.status,
-        createdAt: existingItem.createdAt,
-      },
+      duplicate: isAdmin
+        ? {
+            researchItemId: existingItem.id,
+            createdBy: existingItem.createdBy,
+            currentStatus: existingItem.status,
+            createdAt: existingItem.createdAt,
+          }
+        : null,
     };
   }
 

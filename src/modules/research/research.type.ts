@@ -31,13 +31,17 @@ export type DuplicateCreatorInfo = {
   email: string;
 };
 
-export type DuplicateResearchItemData = {
-  alreadyExists: true;
-  researchItemId: string;
-  createdBy: DuplicateCreatorInfo;
-  currentStatus: ResearchStatus;
-  createdAt: Date;
-};
+export type DuplicateResearchItemData =
+  | {
+      alreadyExists: true;
+    }
+  | {
+      alreadyExists: true;
+      researchItemId: string;
+      createdBy: DuplicateCreatorInfo;
+      currentStatus: ResearchStatus;
+      createdAt: Date;
+    };
 
 export type ResearchItemReadItem = {
   id: string;

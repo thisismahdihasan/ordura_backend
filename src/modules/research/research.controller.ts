@@ -47,6 +47,7 @@ export const createResearchItem = async (
     workspaceId,
     authReq.user.id,
     validatedInput,
+    authReq.workspaceMembership.roles,
     { manualImageFile }
   );
 
@@ -224,6 +225,7 @@ export const previewResearchItem = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
   const rawWorkspaceId = req.params.workspaceId;
   const workspaceId = Array.isArray(rawWorkspaceId)
     ? rawWorkspaceId[0]
@@ -233,7 +235,8 @@ export const previewResearchItem = async (
 
   const preview = await researchService.previewResearchItem(
     workspaceId,
-    validatedInput
+    validatedInput,
+    authReq.workspaceMembership.roles
   );
 
   ApiResponse.success(res, {

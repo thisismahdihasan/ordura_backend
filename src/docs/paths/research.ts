@@ -82,7 +82,7 @@ export const researchPaths: OpenApiPathMap = {
       summary: "Preview Etsy listing metadata and duplicate status",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit ADMIN or RESEARCHER role required. Previews Etsy listing title, image, and checks whether the listing already exists in this workspace without creating any persistent database records.",
+        "Explicit ADMIN or RESEARCHER role required. Duplicate detection remains enforced. ADMIN responses include duplicate item metadata for workspace management; non-ADMIN responses return alreadyExists: true with duplicate: null and omit internal item, creator, status, and timestamp data.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       requestBody: {
         required: true,
@@ -131,7 +131,7 @@ export const researchPaths: OpenApiPathMap = {
                 "createdAt",
               ],
               properties: {
-                researchItemId: { type: "string" },
+                researchItemId: { type: "string", description: "ADMIN responses only." },
                 createdBy: { $ref: "#/components/schemas/CreatedBySummary" },
                 currentStatus: { $ref: "#/components/schemas/ResearchStatus" },
                 createdAt: { type: "string", format: "date-time" },
@@ -151,7 +151,7 @@ export const researchPaths: OpenApiPathMap = {
       summary: "Create a research item from an Etsy listing",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit ADMIN or RESEARCHER role required. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409 with duplicate metadata. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
+        "Explicit ADMIN or RESEARCHER role required. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409; detailed duplicate metadata is ADMIN-only and non-ADMIN callers receive only alreadyExists: true. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       requestBody: {
         required: true,
@@ -214,7 +214,7 @@ export const researchPaths: OpenApiPathMap = {
         "401": jsonError("Authentication is required."),
         "403": jsonError("ADMIN or RESEARCHER role is required."),
         "409": {
-          description: "The Etsy listing already exists in this workspace.",
+          description: "The Etsy listing already exists in this workspace. ADMIN callers receive detailed duplicate metadata; non-ADMIN callers receive only alreadyExists: true.",
           content: {
             "application/json": {
               schema: {
@@ -224,25 +224,36 @@ export const researchPaths: OpenApiPathMap = {
                     type: "object",
                     properties: {
                       data: {
-                        type: "object",
-                        required: [
-                          "alreadyExists",
-                          "researchItemId",
-                          "createdBy",
-                          "currentStatus",
-                          "createdAt",
+                        oneOf: [
+                          {
+                            type: "object",
+                            required: ["alreadyExists"],
+                            properties: {
+                              alreadyExists: { type: "boolean", enum: [true] },
+                            },
+                          },
+                          {
+                            type: "object",
+                            required: [
+                              "alreadyExists",
+                              "researchItemId",
+                              "createdBy",
+                              "currentStatus",
+                              "createdAt",
+                            ],
+                            properties: {
+                              alreadyExists: { type: "boolean", enum: [true] },
+                              researchItemId: { type: "string" },
+                              createdBy: {
+                                $ref: "#/components/schemas/CreatedBySummary",
+                              },
+                              currentStatus: {
+                                $ref: "#/components/schemas/ResearchStatus",
+                              },
+                              createdAt: { type: "string", format: "date-time" },
+                            },
+                          },
                         ],
-                        properties: {
-                          alreadyExists: { type: "boolean", enum: [true] },
-                          researchItemId: { type: "string" },
-                          createdBy: {
-                            $ref: "#/components/schemas/CreatedBySummary",
-                          },
-                          currentStatus: {
-                            $ref: "#/components/schemas/ResearchStatus",
-                          },
-                          createdAt: { type: "string", format: "date-time" },
-                        },
                       },
                     },
                   },
