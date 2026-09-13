@@ -130,7 +130,7 @@ export const workspacePaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/invites/{inviteId}/resend": {
     post: {
       tags: ["Invites"], summary: "Resend a workspace invitation",
-      description: "ADMIN only. Resends an unaccepted active or expired invitation after a five-minute cooldown. Each successful resend rotates the token and resets link expiry to 24 hours. Tokens and SMTP evidence are never exposed.",
+      description: "ADMIN only. Resends an unaccepted active or expired invitation after a five-minute cooldown. Each successful resend rotates the token and resets link expiry to 24 hours. Tokens and mail-provider evidence are never exposed.",
       security: [{ cookieAuth: [] }],
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { name: "inviteId", in: "path", required: true, schema: { type: "string", minLength: 1 } }],
       responses: { "200": jsonSuccess("Workspace invitation resent successfully.", inviteData), "401": jsonError("Authentication is required."), "403": jsonError("Explicit ADMIN role is required."), "404": jsonError("Workspace invitation was not found."), "409": jsonError("Accepted invitation or changed invite state."), "429": jsonError("Invite resend cooldown is active. `data.retryAfterSeconds` is returned."), "502": jsonError("Invitation mail submission failed or could not be finalized.") },

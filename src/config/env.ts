@@ -44,11 +44,8 @@ const envSchema = z.object({
     )
     .default("7d"),
   COOKIE_NAME: z.string().default("storeops_token"),
-  SMTP_HOST: z.string().min(1, "SMTP_HOST is required"),
-  SMTP_PORT: z.coerce.number().default(587),
-  SMTP_USER: z.string().min(1, "SMTP_USER is required"),
-  SMTP_PASS: z.string().min(1, "SMTP_PASS is required"),
-  SMTP_FROM: z.string().min(1, "SMTP_FROM is required"),
+  RESEND_API_KEY: z.string().trim().min(1, "RESEND_API_KEY is required"),
+  EMAIL_FROM: z.string().trim().min(1, "EMAIL_FROM is required"),
   FRONTEND_INVITE_URL: z.string().url("FRONTEND_INVITE_URL must be a valid URL"),
   CLOUDINARY_CLOUD_NAME: z.string().trim().optional(),
   CLOUDINARY_API_KEY: z.string().trim().optional(),

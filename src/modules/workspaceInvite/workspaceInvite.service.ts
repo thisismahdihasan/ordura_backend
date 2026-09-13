@@ -4,8 +4,8 @@ import { ApiError } from "../../shared/ApiError.js";
 import { backfillUnassignedListings } from "../listing/listing.service.js";
 import { assignUnassignedResearchBacklog } from "../research/research.assignment.js";
 import {
-  getMailTransportErrorDetails,
-  MailSendEvidence,
+  getMailProviderErrorDetails,
+  MailSendResult,
   sendMail,
 } from "../../services/mail.service.js";
 import { buildInviteEmail } from "./workspaceInvite.email.js";
@@ -134,7 +134,7 @@ const logInviteMailFailure = ({
   inviteId: string;
   workspaceId: string;
 }): void => {
-  const details = getMailTransportErrorDetails(error);
+  const details = getMailProviderErrorDetails(error);
 
   console.warn("Workspace invitation mail submission failed", {
     action,
@@ -142,22 +142,11 @@ const logInviteMailFailure = ({
     workspaceId,
     recipient: maskRecipient(email),
     recipientDomain: recipientDomain(email),
-    smtpErrorCode: details.code,
-    smtpCommand: details.command,
-    smtpMessage: details.message,
-    smtpResponse: details.response,
-    smtpResponseCode: details.responseCode,
+    mailProviderCode: details.code,
+    mailProviderMessage: details.message,
+    mailProviderStatusCode: details.statusCode,
   });
 };
-
-const recipientWasAccepted = (
-  evidence: MailSendEvidence,
-  recipient: string
-): boolean =>
-  evidence.accepted.some(
-    (acceptedRecipient) =>
-      normalizeEmail(acceptedRecipient) === normalizeEmail(recipient)
-  );
 
 const sendWorkspaceInvitationEmail = async ({
   email,
@@ -169,32 +158,23 @@ const sendWorkspaceInvitationEmail = async ({
   rawToken: string;
   roles: WorkspaceRole[];
   workspaceName: string;
-}): Promise<MailSendEvidence> => {
+}): Promise<MailSendResult> => {
   const emailContent = buildInviteEmail({
     workspaceName,
     roles,
     rawToken,
   });
-  const evidence = await sendMail({
+  return sendMail({
     to: email,
     subject: emailContent.subject,
     text: emailContent.text,
     html: emailContent.html,
   });
-
-  if (!recipientWasAccepted(evidence, email)) {
-    throw new ApiError(502, "Mail server did not accept the invitation recipient");
-  }
-
-  return evidence;
 };
 
-const sendEvidenceData = (evidence: MailSendEvidence, sentAt: Date) => ({
-  lastAccepted: evidence.accepted,
-  lastMessageId: evidence.messageId,
-  lastRejected: evidence.rejected,
+const sendEvidenceData = (result: MailSendResult, sentAt: Date) => ({
+  lastMessageId: result.messageId,
   lastSentAt: sentAt,
-  lastSmtpResponse: evidence.response,
 });
 
 const cleanupInviteAfterInitialSendFailure = async (inviteId: string) => {
@@ -370,9 +350,9 @@ export const createWorkspaceInvite = async (
     INVITE_DB_TRANSACTION_OPTIONS
   );
 
-  let evidence: MailSendEvidence;
+  let result: MailSendResult;
   try {
-    evidence = await sendWorkspaceInvitationEmail({
+    result = await sendWorkspaceInvitationEmail({
       email: normalizedEmail,
       rawToken,
       roles: input.roles,
@@ -396,7 +376,7 @@ export const createWorkspaceInvite = async (
   try {
     sentInvite = await prisma.workspaceInvite.update({
       where: { id: invite.id },
-      data: sendEvidenceData(evidence, sentAt),
+      data: sendEvidenceData(result, sentAt),
       select: safeWorkspaceInviteSelect,
     });
   } catch (error) {
@@ -491,10 +471,10 @@ export const resendWorkspaceInvite = async (
         const expiresAt = new Date(
           now.getTime() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
         );
-        let evidence: MailSendEvidence;
+        let result: MailSendResult;
 
         try {
-          evidence = await sendWorkspaceInvitationEmail({
+          result = await sendWorkspaceInvitationEmail({
             email: invite.email,
             rawToken,
             roles: invite.roles,
@@ -522,7 +502,7 @@ export const resendWorkspaceInvite = async (
           data: {
             tokenHash,
             expiresAt,
-            ...sendEvidenceData(evidence, now),
+            ...sendEvidenceData(result, now),
           },
         });
 
