@@ -737,23 +737,16 @@ export const getUserActivity = async (
 
   const { dateRange, filter } = resolveDashboardDateRange(query);
 
-  const hasResearcherRole = member.roles.includes(WorkspaceRole.RESEARCHER);
-  const hasDesignerRole = member.roles.includes(WorkspaceRole.DESIGNER);
-  const hasListerRole = member.roles.includes(WorkspaceRole.LISTER);
-
   // 2. Fetch summary aggregates and recent items in parallel
-  const researchPromise = hasResearcherRole
-    ? prisma.researchItem.count({
-        where: {
-          workspaceId,
-          createdById: userId,
-          ...(filter ? { createdAt: filter } : {}),
-        },
-      })
-    : Promise.resolve(null);
+  const researchPromise = prisma.researchItem.count({
+    where: {
+      workspaceId,
+      createdById: userId,
+      ...(filter ? { createdAt: filter } : {}),
+    },
+  });
 
-  const designPromise = hasDesignerRole
-    ? Promise.all([
+  const designPromise = Promise.all([
         prisma.designAssignment.count({
           where: {
             designerId: userId,
@@ -800,11 +793,9 @@ export const getUserActivity = async (
             completedAt: filter ? filter : { not: null },
           },
         }),
-      ])
-    : Promise.resolve(null);
+      ]);
 
-  const listingPromise = hasListerRole
-    ? Promise.all([
+  const listingPromise = Promise.all([
         prisma.listingAssignment.count({
           where: {
             listerId: userId,
@@ -829,8 +820,7 @@ export const getUserActivity = async (
             ...(filter ? { listedAt: filter } : {}),
           },
         }),
-      ])
-    : Promise.resolve(null);
+      ]);
 
   const recentItemsPromise = prisma.researchItem.findMany({
     where: {
@@ -893,14 +883,14 @@ export const getUserActivity = async (
     ]);
 
   const researchSummary: UserActivitySummaryResearch | null =
-    hasResearcherRole && researchCount !== null
+    researchCount > 0
       ? {
           totalCreated: researchCount,
         }
       : null;
 
   const designSummary: UserActivitySummaryDesign | null =
-    hasDesignerRole && designMetrics !== null
+    designMetrics.some((metric) => metric > 0)
       ? {
           assignedCount: designMetrics[0],
           currentInProgress: designMetrics[1],
@@ -912,7 +902,7 @@ export const getUserActivity = async (
       : null;
 
   const listingSummary: UserActivitySummaryListing | null =
-    hasListerRole && listingMetrics !== null
+    listingMetrics.some((metric) => metric > 0)
       ? {
           assignedCount: listingMetrics[0],
           currentInProgress: listingMetrics[1],
