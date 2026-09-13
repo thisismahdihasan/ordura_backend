@@ -41,11 +41,7 @@ router.post(
 router.get(
   "/",
   requireAuth,
-  requireWorkspaceRole(
-    WorkspaceRole.ADMIN,
-    WorkspaceRole.RESEARCHER,
-    WorkspaceRole.DESIGNER
-  ),
+  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER),
   catchAsync(getResearchItems)
 );
 

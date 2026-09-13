@@ -64,6 +64,7 @@ export const getResearchItems = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
   const rawWorkspaceId = req.params.workspaceId;
   const workspaceId = Array.isArray(rawWorkspaceId)
     ? rawWorkspaceId[0]
@@ -71,7 +72,12 @@ export const getResearchItems = async (
 
   const validatedQuery = getResearchItemsQuerySchema.parse(req.query);
 
-  const result = await researchService.getResearchItems(workspaceId, validatedQuery);
+  const result = await researchService.getResearchItems(
+    workspaceId,
+    validatedQuery,
+    authReq.user.id,
+    authReq.workspaceMembership.roles
+  );
 
   ApiResponse.success(res, {
     statusCode: 200,
@@ -87,16 +93,22 @@ export const getIssueItems = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
   const rawWorkspaceId = req.params.workspaceId;
   const workspaceId = Array.isArray(rawWorkspaceId)
     ? rawWorkspaceId[0]
     : rawWorkspaceId;
   const validatedQuery = getIssueItemsQuerySchema.parse(req.query);
 
-  const result = await researchService.getResearchItems(workspaceId, {
-    ...validatedQuery,
-    status: ResearchStatus.ISSUE_REPORTED,
-  });
+  const result = await researchService.getResearchItems(
+    workspaceId,
+    {
+      ...validatedQuery,
+      status: ResearchStatus.ISSUE_REPORTED,
+    },
+    authReq.user.id,
+    authReq.workspaceMembership.roles
+  );
 
   ApiResponse.success(res, {
     statusCode: 200,

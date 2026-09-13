@@ -395,15 +395,19 @@ const assertCurrentListingAssignmentOwnership = async (
 // Returns a paginated list of workspace research items matching creator, status, date, or search filters.
 export const getResearchItems = async (
   workspaceId: string,
-  query: GetResearchItemsQueryInput
+  query: GetResearchItemsQueryInput,
+  userId: string,
+  roles: readonly WorkspaceRole[]
 ): Promise<ResearchItemListResult> => {
   const { page, limit, createdBy, status, date, search } = query;
+  const isAdmin = roles.includes(WorkspaceRole.ADMIN);
 
   const where: Prisma.ResearchItemWhereInput = {
     workspaceId,
+    ...(isAdmin ? {} : { createdById: userId }),
   };
 
-  if (createdBy) {
+  if (isAdmin && createdBy) {
     where.createdById = createdBy;
   }
 

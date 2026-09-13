@@ -289,7 +289,7 @@ export const researchPaths: OpenApiPathMap = {
     },
     get: {
       tags: ["Research"], summary: "List workspace research items", security: [{ cookieAuth: [] }],
-      description: "ADMIN, RESEARCHER, and DESIGNER may read this list. Listers use the assignment-owned listing queue instead.",
+      description: "ADMIN users may read the workspace-wide list and use the optional createdBy filter. RESEARCHER users receive only items they created; their createdBy query value is ignored. DESIGNER and LISTER users use assignment-owned workflow endpoints instead.",
       parameters: [
         { $ref: "#/components/parameters/WorkspaceId" },
         { name: "createdBy", in: "query", schema: { type: "string", minLength: 1 } },
