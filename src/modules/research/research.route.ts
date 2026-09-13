@@ -6,6 +6,7 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import {
   createResearchItem,
   deleteResearchItem,
+  getIssueItems,
   getResearchItemById,
   getResearchItems,
   getResearchReferenceImage,
@@ -42,6 +43,14 @@ router.get(
     WorkspaceRole.DESIGNER
   ),
   catchAsync(getResearchItems)
+);
+
+// Registered before /:researchItemId so "issues" is never interpreted as an item ID.
+router.get(
+  "/issues",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getIssueItems)
 );
 
 router.patch(

@@ -71,6 +71,18 @@ export type GetResearchItemsQueryInput = z.infer<
   typeof getResearchItemsQuerySchema
 >;
 
+// Narrows the admin issue queue to the list controls it supports. The status is
+// intentionally not client-controlled; the controller always forces ISSUE_REPORTED.
+export const getIssueItemsQuerySchema = getResearchItemsQuerySchema
+  .pick({
+    limit: true,
+    page: true,
+    search: true,
+  })
+  .strict();
+
+export type GetIssueItemsQueryInput = z.infer<typeof getIssueItemsQuerySchema>;
+
 export const getResearchItemParamsSchema = z.object({
   workspaceId: z.string().trim().min(1, "workspaceId is required"),
   researchItemId: z.string().trim().min(1, "researchItemId is required"),

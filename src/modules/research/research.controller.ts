@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { pipeline, Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { ResearchStatus } from "@prisma/client";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
@@ -12,6 +13,7 @@ import { assignUnassignedResearchBacklog } from "./research.assignment.js";
 import * as researchService from "./research.service.js";
 import {
   createResearchItemSchema,
+  getIssueItemsQuerySchema,
   getReferenceImageQuerySchema,
   getResearchItemParamsSchema,
   getResearchItemsQuerySchema,
@@ -65,6 +67,31 @@ export const getResearchItems = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Research items retrieved successfully",
+    data: result,
+  });
+};
+
+// Retrieves the ADMIN-only queue of currently reported design issues.
+// The response reuses the normal safe research list projection, while the
+// ISSUE_REPORTED status is enforced server-side rather than accepted from the client.
+export const getIssueItems = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+  const validatedQuery = getIssueItemsQuerySchema.parse(req.query);
+
+  const result = await researchService.getResearchItems(workspaceId, {
+    ...validatedQuery,
+    status: ResearchStatus.ISSUE_REPORTED,
+  });
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Issue items retrieved successfully",
     data: result,
   });
 };

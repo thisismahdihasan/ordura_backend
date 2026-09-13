@@ -173,6 +173,34 @@ export const researchPaths: OpenApiPathMap = {
       responses: { "200": jsonSuccess("Research items retrieved successfully.", { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: researchListItem }, pagination: { $ref: "#/components/schemas/Pagination" } } }), "400": jsonError("Invalid list query."), "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required.") },
     },
   },
+  "/api/v1/workspaces/{workspaceId}/research-items/issues": {
+    get: {
+      tags: ["Research"],
+      summary: "List active design issues",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN role required. Returns only research items with server-forced ISSUE_REPORTED status. This route is registered before the researchItemId parameter route.",
+      parameters: [
+        { $ref: "#/components/parameters/WorkspaceId" },
+        { name: "search", in: "query", schema: { type: "string" } },
+        { $ref: "#/components/parameters/Page" },
+        { $ref: "#/components/parameters/Limit" },
+      ],
+      responses: {
+        "200": jsonSuccess("Issue items retrieved successfully.", {
+          type: "object",
+          required: ["items", "pagination"],
+          properties: {
+            items: { type: "array", items: researchListItem },
+            pagination: { $ref: "#/components/schemas/Pagination" },
+          },
+        }),
+        "400": jsonError("Invalid issue list query."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN role is required."),
+      },
+    },
+  },
   "/api/v1/workspaces/{workspaceId}/research-items/{researchItemId}": {
     get: {
       tags: ["Research"], summary: "Get one workspace research item", security: [{ cookieAuth: [] }], parameters: workspaceAndResearchParameters,
