@@ -179,8 +179,7 @@ export const createDownloadFinalAssetHandler = (
     const download = await resolveDownload(
       workspaceId,
       assetId,
-      authReq.user.id,
-      authReq.workspaceMembership.roles
+      authReq.user.id
     );
 
     const stopUpstream = (): void => {

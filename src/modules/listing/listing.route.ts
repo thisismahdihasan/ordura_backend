@@ -26,7 +26,7 @@ const listingRouter: Router = Router({ mergeParams: true });
 listingRouter.get(
   "/assets/:assetId/download",
   requireAuth,
-  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.LISTER),
+  requireWorkspaceRole(WorkspaceRole.LISTER),
   catchAsync(downloadFinalAsset)
 );
 

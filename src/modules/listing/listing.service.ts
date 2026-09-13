@@ -1,4 +1,4 @@
-import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
+import { Prisma, ResearchStatus } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "../research/research.helper.js";
@@ -23,11 +23,6 @@ const LISTER_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
   ResearchStatus.READY_FOR_LISTING,
   ResearchStatus.LISTING_IN_PROGRESS,
   ResearchStatus.LISTED,
-]);
-
-const ADMIN_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
-  ResearchStatus.DESIGN_APPROVED,
-  ...LISTER_DOWNLOAD_STATUSES,
 ]);
 
 const LISTER_DETAIL_STATUSES = new Set<ResearchStatus>(
@@ -500,8 +495,7 @@ export const startListingWork = async (
 export const getAuthorizedFinalAssetDownload = async (
   workspaceId: string,
   assetId: string,
-  userId: string,
-  userRoles: readonly WorkspaceRole[]
+  userId: string
 ): Promise<FinalAssetDownloadDescriptor> => {
   const asset = await prisma.finalAsset.findFirst({
     where: {
@@ -531,32 +525,25 @@ export const getAuthorizedFinalAssetDownload = async (
     throw new ApiError(404, "Final asset not found");
   }
 
-  const isAdmin = userRoles.includes(WorkspaceRole.ADMIN);
-  const allowedStatuses = isAdmin
-    ? ADMIN_DOWNLOAD_STATUSES
-    : LISTER_DOWNLOAD_STATUSES;
-
-  if (!allowedStatuses.has(asset.researchItem.status)) {
+  if (!LISTER_DOWNLOAD_STATUSES.has(asset.researchItem.status)) {
     throw new ApiError(409, "Final asset is not available at this workflow stage.");
   }
 
-  if (!isAdmin) {
-    const currentAssignment = await prisma.listingAssignment.findFirst({
-      where: {
-        researchItemId: asset.researchItemId,
-        listerId: userId,
-        isCurrent: true,
-      },
-      select: {
-        id: true,
-        listerId: true,
-        isCurrent: true,
-      },
-    });
+  const currentAssignment = await prisma.listingAssignment.findFirst({
+    where: {
+      researchItemId: asset.researchItemId,
+      listerId: userId,
+      isCurrent: true,
+    },
+    select: {
+      id: true,
+      listerId: true,
+      isCurrent: true,
+    },
+  });
 
-    if (!currentAssignment) {
-      throw new ApiError(403, "You are not assigned to this research item");
-    }
+  if (!currentAssignment) {
+    throw new ApiError(403, "You are not assigned to this research item");
   }
 
   const stream = await getObjectStream(asset.storageKey);
