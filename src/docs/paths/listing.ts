@@ -92,12 +92,12 @@ export const listingPaths: OpenApiPathMap = {
                   listingResult: {
                     type: "object",
                     nullable: true,
-                    required: ["id", "etsyListingUrl", "listedAt", "lister"],
+                    required: ["id", "etsyListingUrl", "listedAt", "listedBy"],
                     properties: {
                       id: { type: "string" },
                       etsyListingUrl: { type: "string", format: "uri", nullable: true },
                       listedAt: { type: "string", format: "date-time" },
-                      lister: {
+                      listedBy: {
                         type: "object",
                         required: ["id", "name", "email"],
                         properties: {
@@ -108,6 +108,7 @@ export const listingPaths: OpenApiPathMap = {
                       },
                     },
                   },
+
                   createdAt: { type: "string", format: "date-time" },
                   updatedAt: { type: "string", format: "date-time" },
                 },
