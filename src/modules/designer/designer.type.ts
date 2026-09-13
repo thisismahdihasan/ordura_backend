@@ -36,6 +36,46 @@ export type DesignerWorkQueueResult = {
   pagination: PaginationMeta;
 };
 
+export type AdminDesignListItem = {
+  id: string;
+  etsyListingId: string;
+  originalUrl: string;
+  normalizedUrl: string;
+  title: string | null;
+  referenceImageUrl: string | null;
+  status: ResearchStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  currentDesigner: {
+    id: string;
+    name: string | null;
+    email: string;
+  } | null;
+  currentAssignment: {
+    id: string;
+    assignedAt: Date;
+    startedAt: Date | null;
+    completedAt: Date | null;
+  } | null;
+  latestReview: {
+    id: string;
+    roundNumber: number;
+    submittedAt: Date;
+    approvedAt: Date | null;
+  } | null;
+  latestIssueReport: {
+    id: string;
+    reason: string;
+    details: string | null;
+    createdAt: Date;
+  } | null;
+};
+
+export type AdminDesignListResult = {
+  items: AdminDesignListItem[];
+  pagination: PaginationMeta;
+};
+
 export type StartDesignWorkResult = {
   researchItem: {
     id: string;

@@ -4,6 +4,7 @@ import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
+  getAdminDesignList,
   getDesignerWorkQueue,
   getDesignDetail,
   reportDesignIssue,
@@ -26,6 +27,13 @@ designerRouter.get(
 );
 
 const designRouter: Router = Router({ mergeParams: true });
+
+designRouter.get(
+  "/",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getAdminDesignList)
+);
 
 designRouter.get(
   "/:researchItemId",

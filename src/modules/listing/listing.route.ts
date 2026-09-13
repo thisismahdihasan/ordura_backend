@@ -7,6 +7,7 @@ import {
   backfillListingAssignments,
   completeListing,
   downloadFinalAsset,
+  getAdminListingList,
   getListerListingDetail,
   getListerWorkQueue,
   startListing,
@@ -22,6 +23,13 @@ listerRouter.get(
 );
 
 const listingRouter: Router = Router({ mergeParams: true });
+
+listingRouter.get(
+  "/",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getAdminListingList)
+);
 
 listingRouter.get(
   "/assets/:assetId/download",

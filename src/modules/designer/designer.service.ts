@@ -3,13 +3,17 @@ import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import {
+  ADMIN_DESIGN_WORKFLOW_STATUSES,
   DESIGNER_QUEUE_ACTIVE_STATUSES,
+  GetAdminDesignListQueryInput,
   GetDesignerWorkQueueQueryInput,
   MAX_FINAL_ASSET_FILES,
   ReportDesignIssueBodyInput,
   validateFinalAssetFile,
 } from "./designer.validation.js";
 import {
+  AdminDesignListItem,
+  AdminDesignListResult,
   DesignerWorkQueueItem,
   DesignerWorkQueueResult,
   FinalAssetIncomingFile,
@@ -1348,4 +1352,156 @@ export const completeDesignWork = async (
       timeout: 15000,
     }
   );
+};
+
+export const getAdminDesignList = async (
+  workspaceId: string,
+  query: GetAdminDesignListQueryInput
+): Promise<AdminDesignListResult> => {
+  const { page, limit, designerId, status, date, search } = query;
+
+  const where: Prisma.ResearchItemWhereInput = {
+    workspaceId,
+    status: status ? status : { in: [...ADMIN_DESIGN_WORKFLOW_STATUSES] },
+  };
+
+  if (designerId) {
+    where.designAssignments = {
+      some: { designerId },
+    };
+  }
+
+  if (date) {
+    const [year, month, day] = date.split("-").map(Number);
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    const nextDay = new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0));
+    where.createdAt = {
+      gte: startOfDay,
+      lt: nextDay,
+    };
+  }
+
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: "insensitive" } },
+      { etsyListingId: { contains: search, mode: "insensitive" } },
+      { normalizedUrl: { contains: search, mode: "insensitive" } },
+      { originalUrl: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [rawItems, total] = await prisma.$transaction([
+    prisma.researchItem.findMany({
+      where,
+      select: {
+        id: true,
+        etsyListingId: true,
+        originalUrl: true,
+        normalizedUrl: true,
+        title: true,
+        referenceImageUrl: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        designAssignments: {
+          where: { isCurrent: true },
+          take: 1,
+          select: {
+            id: true,
+            assignedAt: true,
+            startedAt: true,
+            completedAt: true,
+            designer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        reviewSubmissions: {
+          orderBy: [{ roundNumber: "desc" }],
+          take: 1,
+          select: {
+            id: true,
+            roundNumber: true,
+            submittedAt: true,
+            approvedAt: true,
+          },
+        },
+        issueReports: {
+          orderBy: [{ createdAt: "desc" }],
+          take: 1,
+          select: {
+            id: true,
+            reason: true,
+            details: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      skip,
+      take: limit,
+    }),
+    prisma.researchItem.count({ where }),
+  ]);
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  const items: AdminDesignListItem[] = rawItems.map((item) => {
+    const currentAssignment = item.designAssignments[0] ?? null;
+    const latestReview = item.reviewSubmissions[0] ?? null;
+    const latestIssue = item.issueReports[0] ?? null;
+
+    return {
+      id: item.id,
+      etsyListingId: item.etsyListingId,
+      originalUrl: item.originalUrl,
+      normalizedUrl: item.normalizedUrl,
+      title: item.title,
+      referenceImageUrl: item.referenceImageUrl,
+      status: item.status,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      currentDesigner: currentAssignment?.designer ?? null,
+      currentAssignment: currentAssignment
+        ? {
+            id: currentAssignment.id,
+            assignedAt: currentAssignment.assignedAt,
+            startedAt: currentAssignment.startedAt,
+            completedAt: currentAssignment.completedAt,
+          }
+        : null,
+      latestReview: latestReview
+        ? {
+            id: latestReview.id,
+            roundNumber: latestReview.roundNumber,
+            submittedAt: latestReview.submittedAt,
+            approvedAt: latestReview.approvedAt,
+          }
+        : null,
+      latestIssueReport: latestIssue
+        ? {
+            id: latestIssue.id,
+            reason: latestIssue.reason,
+            details: latestIssue.details,
+            createdAt: latestIssue.createdAt,
+          }
+        : null,
+    };
+  });
+
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+    },
+  };
 };

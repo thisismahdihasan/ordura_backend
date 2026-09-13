@@ -1,9 +1,11 @@
 import { NextFunction, Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
+import { ApiError } from "../../shared/ApiError.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as listingService from "./listing.service.js";
 import {
   backfillListingAssignmentsParamsSchema,
+  getAdminListingListQuerySchema,
   getListerWorkQueueQuerySchema,
   getListerListingDetailParamsSchema,
   startListingBodySchema,
@@ -230,3 +232,27 @@ export const createDownloadFinalAssetHandler = (
 
 // Streams an authorized final asset to the caller without buffering its bytes in application memory.
 export const downloadFinalAsset = createDownloadFinalAssetHandler();
+
+// Returns paginated operational listing items for workspace Admins.
+export const getAdminListingList = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+
+  if (!workspaceId) {
+    throw new ApiError(400, "Workspace ID is required");
+  }
+
+  const query = getAdminListingListQuerySchema.parse(req.query);
+  const result = await listingService.getAdminListingList(workspaceId, query);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Admin listing list retrieved successfully",
+    data: result,
+  });
+};

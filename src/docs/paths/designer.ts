@@ -115,6 +115,128 @@ const designerDetailResponse = {
 };
 
 export const designerPaths: OpenApiPathMap = {
+  "/api/v1/workspaces/{workspaceId}/design": {
+    get: {
+      tags: ["Designer"],
+      summary: "Get workspace design operations inventory",
+      security: [{ cookieAuth: [] }],
+      description: "ADMIN only. Operational management list of all research items across design workflow stages. Supports filtering by designerId, status, date, and search query.",
+      parameters: [
+        { $ref: "#/components/parameters/WorkspaceId" },
+        { $ref: "#/components/parameters/Page" },
+        { $ref: "#/components/parameters/Limit" },
+        { name: "designerId", in: "query", schema: { type: "string" }, description: "Filter items assigned to or worked on by this designer." },
+        {
+          name: "status",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: [
+              "ASSIGNED",
+              "DESIGN_IN_PROGRESS",
+              "DESIGN_REVIEW",
+              "CORRECTION_NEEDED",
+              "ISSUE_REPORTED",
+              "DESIGN_APPROVED",
+              "READY_FOR_LISTING",
+              "LISTING_IN_PROGRESS",
+              "LISTED",
+            ],
+          },
+          description: "Workflow status filter.",
+        },
+        { name: "date", in: "query", schema: { type: "string", format: "date", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, description: "Filter items created on this date (YYYY-MM-DD)." },
+        { name: "search", in: "query", schema: { type: "string", maxLength: 100 }, description: "Search by title or Etsy listing ID." },
+      ],
+      responses: {
+        "200": jsonSuccess("Admin designs retrieved successfully", {
+          type: "object",
+          required: ["items", "pagination"],
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                required: [
+                  "id",
+                  "etsyListingId",
+                  "title",
+                  "originalUrl",
+                  "normalizedUrl",
+                  "referenceImageUrl",
+                  "status",
+                  "currentAssignment",
+                  "currentDesigner",
+                  "latestReview",
+                  "latestIssueReport",
+                  "createdAt",
+                  "updatedAt",
+                ],
+                properties: {
+                  id: { type: "string" },
+                  etsyListingId: { type: "string" },
+                  title: { type: "string", nullable: true },
+                  originalUrl: { type: "string", format: "uri" },
+                  normalizedUrl: { type: "string", format: "uri" },
+                  referenceImageUrl: { type: "string", format: "uri", nullable: true },
+                  status: { $ref: "#/components/schemas/ResearchStatus" },
+                  currentAssignment: {
+                    type: "object",
+                    nullable: true,
+                    required: ["id", "assignedAt", "startedAt", "completedAt"],
+                    properties: {
+                      id: { type: "string" },
+                      assignedAt: { type: "string", format: "date-time" },
+                      startedAt: { type: "string", format: "date-time", nullable: true },
+                      completedAt: { type: "string", format: "date-time", nullable: true },
+                    },
+                  },
+                  currentDesigner: {
+                    type: "object",
+                    nullable: true,
+                    required: ["id", "name", "email"],
+                    properties: {
+                      id: { type: "string" },
+                      name: { type: "string", nullable: true },
+                      email: { type: "string", format: "email" },
+                    },
+                  },
+                  latestReview: {
+                    type: "object",
+                    nullable: true,
+                    required: ["id", "roundNumber", "submittedAt", "approvedAt"],
+                    properties: {
+                      id: { type: "string" },
+                      roundNumber: { type: "integer" },
+                      submittedAt: { type: "string", format: "date-time" },
+                      approvedAt: { type: "string", format: "date-time", nullable: true },
+                    },
+                  },
+                  latestIssueReport: {
+                    type: "object",
+                    nullable: true,
+                    required: ["id", "reason", "details", "createdAt"],
+                    properties: {
+                      id: { type: "string" },
+                      reason: { type: "string" },
+                      details: { type: "string", nullable: true },
+                      createdAt: { type: "string", format: "date-time" },
+                    },
+                  },
+                  createdAt: { type: "string", format: "date-time" },
+                  updatedAt: { type: "string", format: "date-time" },
+                },
+              },
+            },
+            pagination: { $ref: "#/components/schemas/Pagination" },
+          },
+        }),
+        "400": jsonError("Invalid query parameters."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Explicit ADMIN role is required."),
+      },
+    },
+  },
   "/api/v1/workspaces/{workspaceId}/designer/my-work": {
     get: {
       tags: ["Designer"], summary: "Get the current designer's active queue", security: [{ cookieAuth: [] }],

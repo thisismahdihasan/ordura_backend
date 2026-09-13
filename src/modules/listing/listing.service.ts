@@ -5,6 +5,8 @@ import { extractEtsyListing } from "../research/research.helper.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
 import { getObjectStream } from "../storage/r2.js";
 import {
+  AdminListingListItem,
+  AdminListingListResult,
   BackfillListingResult,
   CompleteListingResult,
   FinalAssetDownloadDescriptor,
@@ -14,9 +16,11 @@ import {
   StartListingResult,
 } from "./listing.type.js";
 import {
+  ADMIN_LISTING_WORKFLOW_STATUSES,
+  CompleteListingBodyInput,
+  GetAdminListingListQueryInput,
   GetListerWorkQueueQueryInput,
   LISTER_QUEUE_ACTIVE_STATUSES,
-  CompleteListingBodyInput,
 } from "./listing.validation.js";
 
 const LISTER_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
@@ -697,4 +701,144 @@ export const completeListingWork = async (
       timeout: 20000,
     }
   );
+};
+
+export const getAdminListingList = async (
+  workspaceId: string,
+  query: GetAdminListingListQueryInput
+): Promise<AdminListingListResult> => {
+  const { page, limit, listerId, status, date, search } = query;
+
+  const where: Prisma.ResearchItemWhereInput = {
+    workspaceId,
+    status: status ? status : { in: [...ADMIN_LISTING_WORKFLOW_STATUSES] },
+  };
+
+  if (listerId) {
+    where.OR = [
+      { listingAssignments: { some: { listerId } } },
+      { listingResult: { listedById: listerId } },
+    ];
+  }
+
+  if (date) {
+    const [year, month, day] = date.split("-").map(Number);
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    const nextDay = new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0));
+    where.updatedAt = {
+      gte: startOfDay,
+      lt: nextDay,
+    };
+  }
+
+  if (search) {
+    const searchConditions: Prisma.ResearchItemWhereInput[] = [
+      { title: { contains: search, mode: "insensitive" } },
+      { etsyListingId: { contains: search, mode: "insensitive" } },
+      { normalizedUrl: { contains: search, mode: "insensitive" } },
+      { originalUrl: { contains: search, mode: "insensitive" } },
+    ];
+    if (where.OR) {
+      where.AND = [
+        { OR: where.OR },
+        { OR: searchConditions },
+      ];
+      delete where.OR;
+    } else {
+      where.OR = searchConditions;
+    }
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [rawItems, total] = await prisma.$transaction([
+    prisma.researchItem.findMany({
+      where,
+      select: {
+        id: true,
+        etsyListingId: true,
+        originalUrl: true,
+        normalizedUrl: true,
+        title: true,
+        referenceImageUrl: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        listingAssignments: {
+          where: { isCurrent: true },
+          take: 1,
+          select: {
+            id: true,
+            assignedAt: true,
+            startedAt: true,
+            completedAt: true,
+            lister: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        listingResult: {
+          select: {
+            id: true,
+            etsyListingUrl: true,
+            listedAt: true,
+            listedBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      skip,
+      take: limit,
+    }),
+    prisma.researchItem.count({ where }),
+  ]);
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  const items: AdminListingListItem[] = rawItems.map((item) => {
+    const currentAssignment = item.listingAssignments[0] ?? null;
+
+    return {
+      id: item.id,
+      etsyListingId: item.etsyListingId,
+      originalUrl: item.originalUrl,
+      normalizedUrl: item.normalizedUrl,
+      title: item.title,
+      referenceImageUrl: item.referenceImageUrl,
+      status: item.status,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      currentLister:
+        currentAssignment?.lister ?? item.listingResult?.listedBy ?? null,
+      currentAssignment: currentAssignment
+        ? {
+            id: currentAssignment.id,
+            assignedAt: currentAssignment.assignedAt,
+            startedAt: currentAssignment.startedAt,
+            completedAt: currentAssignment.completedAt,
+          }
+        : null,
+      listingResult: item.listingResult,
+    };
+  });
+
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+    },
+  };
 };

@@ -10,6 +10,9 @@ import {
 } from "./designer.review-storage.js";
 import { FinalAssetIncomingFile } from "./designer.type.js";
 import {
+  completeDesignBodySchema,
+  completeDesignParamsSchema,
+  getAdminDesignListQuerySchema,
   getDesignerWorkQueueQuerySchema,
   getDesignDetailParamsSchema,
   reportDesignIssueBodySchema,
@@ -20,8 +23,6 @@ import {
   submitDesignReviewBodySchema,
   submitDesignReviewParamsSchema,
   uploadFinalAssetsParamsSchema,
-  completeDesignBodySchema,
-  completeDesignParamsSchema,
 } from "./designer.validation.js";
 
 // Returns the authenticated current designer's private design-work detail.
@@ -256,6 +257,30 @@ export const completeDesign = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Design completed and marked ready for listing successfully",
+    data: result,
+  });
+};
+
+// Returns paginated operational design items for workspace Admins.
+export const getAdminDesignList = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+
+  if (!workspaceId) {
+    throw new ApiError(400, "Workspace ID is required");
+  }
+
+  const query = getAdminDesignListQuerySchema.parse(req.query);
+  const result = await designerService.getAdminDesignList(workspaceId, query);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Admin design list retrieved successfully",
     data: result,
   });
 };

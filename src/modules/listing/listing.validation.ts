@@ -50,6 +50,71 @@ export type GetListerWorkQueueQueryInput = z.infer<
   typeof getListerWorkQueueQuerySchema
 >;
 
+export const ADMIN_LISTING_WORKFLOW_STATUSES = [
+  ResearchStatus.READY_FOR_LISTING,
+  ResearchStatus.LISTING_IN_PROGRESS,
+  ResearchStatus.LISTED,
+] as const;
+
+export type AdminListingWorkflowStatus =
+  (typeof ADMIN_LISTING_WORKFLOW_STATUSES)[number];
+
+export const getAdminListingListQuerySchema = z
+  .object({
+    page: z.coerce
+      .number()
+      .int("page must be an integer")
+      .positive("page must be a positive integer")
+      .default(1),
+    limit: z.coerce
+      .number()
+      .int("limit must be an integer")
+      .positive("limit must be a positive integer")
+      .max(100, "limit cannot exceed 100")
+      .default(20),
+    listerId: z.string().trim().min(1, "listerId cannot be empty").optional(),
+    status: z
+      .nativeEnum(ResearchStatus, {
+        message: "Invalid status filter",
+      })
+      .refine(
+        (val): val is AdminListingWorkflowStatus =>
+          (ADMIN_LISTING_WORKFLOW_STATUSES as readonly ResearchStatus[]).includes(val),
+        {
+          message:
+            "Invalid listing status filter. Allowed values: READY_FOR_LISTING, LISTING_IN_PROGRESS, LISTED",
+        }
+      )
+      .optional(),
+    date: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format, expected YYYY-MM-DD")
+      .refine((val) => {
+        const parts = val.split("-").map(Number);
+        if (parts.length !== 3 || parts.some(isNaN)) return false;
+        const [year, month, day] = parts;
+        const d = new Date(Date.UTC(year, month - 1, day));
+        return (
+          d.getUTCFullYear() === year &&
+          d.getUTCMonth() === month - 1 &&
+          d.getUTCDate() === day
+        );
+      }, "Invalid calendar date")
+      .optional(),
+    search: z
+      .string()
+      .trim()
+      .max(100, "search cannot exceed 100 characters")
+      .transform((val) => (val.length > 0 ? val : undefined))
+      .optional(),
+  })
+  .strict();
+
+export type GetAdminListingListQueryInput = z.infer<
+  typeof getAdminListingListQuerySchema
+>;
+
 export const getListerListingDetailParamsSchema = z
   .object({
     workspaceId: z.string().trim().min(1, "workspaceId is required"),

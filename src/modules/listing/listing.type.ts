@@ -73,6 +73,44 @@ export type ListerWorkQueueResult = {
   pagination: PaginationMeta;
 };
 
+export type AdminListingListItem = {
+  id: string;
+  etsyListingId: string;
+  originalUrl: string;
+  normalizedUrl: string;
+  title: string | null;
+  referenceImageUrl: string | null;
+  status: ResearchStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  currentLister: {
+    id: string;
+    name: string | null;
+    email: string;
+  } | null;
+  currentAssignment: {
+    id: string;
+    assignedAt: Date;
+    startedAt: Date | null;
+    completedAt: Date | null;
+  } | null;
+  listingResult: {
+    id: string;
+    etsyListingUrl: string | null;
+    listedAt: Date;
+    listedBy: {
+      id: string;
+      name: string | null;
+      email: string;
+    };
+  } | null;
+};
+
+export type AdminListingListResult = {
+  items: AdminListingListItem[];
+  pagination: PaginationMeta;
+};
+
 export type ListingUserSummary = {
   id: string;
   name: string | null;
