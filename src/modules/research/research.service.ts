@@ -60,9 +60,13 @@ const duplicateResearchItemSelect = {
 
 export type CreateResearchItemOptions = {
   metadataFetcher?: (url: string) => Promise<EtsyMetadata>;
+  manualImageFile?: { buffer: Buffer; mimetype: string };
+  uploader?: ReferenceImageUploader;
+  destroyer?: ReferenceImageDestroyer;
 };
 
-// Creates a new research item, parses metadata, and atomically auto-assigns the least-loaded designer.
+// Creates a new research item, parses metadata or handles manual upload, and atomically auto-assigns the least-loaded designer.
+// Invariant: A research item must NEVER be created without a valid reference image.
 export const createResearchItem = async (
   workspaceId: string,
   userId: string,
@@ -73,7 +77,7 @@ export const createResearchItem = async (
     input.etsyUrl
   );
 
-  // 1. Readable duplicate pre-check within the same workspace
+  // 1. Readable duplicate pre-check within the same workspace BEFORE any upload
   const existingItem = await prisma.researchItem.findUnique({
     where: {
       workspaceId_etsyListingId: {
@@ -102,16 +106,54 @@ export const createResearchItem = async (
     );
   }
 
-  // 2. Best-effort metadata fetch only for NEW items
-  let metadata: EtsyMetadata = { title: null, referenceImageUrl: null };
-  try {
-    const metadataFetcher = options?.metadataFetcher ?? fetchEtsyMetadata;
-    metadata = await metadataFetcher(normalizedUrl);
-  } catch {
-    metadata = { title: null, referenceImageUrl: null };
+  // 2. Resolve reference image (manual upload or automatic Etsy extraction)
+  let referenceImageUrl: string | null = null;
+  let referenceImagePublicId: string | null = null;
+  let itemTitle: string | null = null;
+
+  if (options?.manualImageFile) {
+    // 2a. Manual image file provided: upload to Cloudinary first
+    const uploader = options.uploader ?? uploadReferenceImageToCloudinary;
+    const uploadResult = await uploader({
+      buffer: options.manualImageFile.buffer,
+      mimetype: options.manualImageFile.mimetype,
+    });
+    referenceImageUrl = uploadResult.secureUrl;
+    referenceImagePublicId = uploadResult.publicId;
+
+    // Best-effort metadata fetch for title
+    try {
+      const metadataFetcher = options.metadataFetcher ?? fetchEtsyMetadata;
+      const metadata = await metadataFetcher(normalizedUrl);
+      itemTitle = metadata.title;
+    } catch {
+      itemTitle = null;
+    }
+  } else {
+    // 2b. No manual image: attempt Etsy metadata extraction
+    try {
+      const metadataFetcher = options?.metadataFetcher ?? fetchEtsyMetadata;
+      const metadata = await metadataFetcher(normalizedUrl);
+      itemTitle = metadata.title;
+      referenceImageUrl = metadata.referenceImageUrl;
+    } catch {
+      itemTitle = null;
+      referenceImageUrl = null;
+    }
   }
 
-  // 3. Atomically create ResearchItem and auto-assign eligible designer if available
+  // 3. Invariant check: A research item must NEVER be created without a reference image
+  if (!referenceImageUrl) {
+    throw new ApiError(
+      422,
+      "A reference image is required to create this research item.",
+      true,
+      "",
+      { code: "REFERENCE_IMAGE_REQUIRED" }
+    );
+  }
+
+  // 4. Atomically create ResearchItem and auto-assign eligible designer if available
   try {
     const createdItem = await prisma.$transaction(async (tx) => {
       await acquireWorkspaceMemberMutationLock(tx, workspaceId);
@@ -131,8 +173,9 @@ export const createResearchItem = async (
           etsyListingId,
           originalUrl,
           normalizedUrl,
-          title: metadata.title,
-          referenceImageUrl: metadata.referenceImageUrl,
+          title: itemTitle,
+          referenceImageUrl,
+          referenceImagePublicId,
           createdById: userId,
           status: initialStatus,
         },
@@ -169,6 +212,17 @@ export const createResearchItem = async (
 
     return createdItem;
   } catch (error) {
+    // Roll back Cloudinary asset if manual image was uploaded but DB transaction failed
+    if (referenceImagePublicId) {
+      try {
+        const destroyer =
+          options?.destroyer ?? destroyReferenceImageFromCloudinary;
+        await destroyer(referenceImagePublicId);
+      } catch {
+        // Rollback error silently handled, preserving original error
+      }
+    }
+
     // Catch concurrent duplicate creation race condition (P2002)
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -208,6 +262,7 @@ export const createResearchItem = async (
     throw error;
   }
 };
+
 
 export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSelect>()({
   id: true,

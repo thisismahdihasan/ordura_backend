@@ -23,6 +23,7 @@ import {
 } from "./research.validation.js";
 
 // Creates a research item from an Etsy listing URL and automatically assigns an eligible designer.
+// Supports both JSON bodies and multipart/form-data with an optional manual image file.
 export const createResearchItem = async (
   req: Request,
   res: Response
@@ -35,10 +36,18 @@ export const createResearchItem = async (
 
   const validatedInput = createResearchItemSchema.parse(req.body);
 
+  const manualImageFile = req.file
+    ? {
+        buffer: req.file.buffer,
+        mimetype: req.file.mimetype,
+      }
+    : undefined;
+
   const researchItem = await researchService.createResearchItem(
     workspaceId,
     authReq.user.id,
-    validatedInput
+    validatedInput,
+    { manualImageFile }
   );
 
   ApiResponse.success(res, {

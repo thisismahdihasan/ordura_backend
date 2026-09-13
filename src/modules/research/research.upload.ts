@@ -71,3 +71,38 @@ export const referenceImageUploadMiddleware = (
     next();
   });
 };
+
+// Handles optional reference image upload for research item creation.
+// Passes through cleanly if no file is uploaded, allowing JSON bodies or multipart without file.
+export const optionalReferenceImageUploadMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  upload(req, res, (err: unknown) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return next(
+            new ApiError(400, "Image size exceeds maximum limit of 10MB")
+          );
+        }
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          return next(
+            new ApiError(
+              400,
+              "Unexpected field or multiple files. Only a single file on 'image' is allowed."
+            )
+          );
+        }
+        return next(new ApiError(400, `Upload error: ${err.message}`));
+      }
+      if (err instanceof ApiError) {
+        return next(err);
+      }
+      return next(new ApiError(400, "Invalid file upload"));
+    }
+
+    next();
+  });
+};

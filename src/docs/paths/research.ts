@@ -147,16 +147,144 @@ export const researchPaths: OpenApiPathMap = {
   },
   "/api/v1/workspaces/{workspaceId}/research-items": {
     post: {
-      tags: ["Research"], summary: "Create a research item from an Etsy listing", security: [{ cookieAuth: [] }],
-      description: "Explicit ADMIN or RESEARCHER role required. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409 with duplicate metadata.",
+      tags: ["Research"],
+      summary: "Create a research item from an Etsy listing",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Explicit ADMIN or RESEARCHER role required. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409 with duplicate metadata. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
-      requestBody: { required: true, content: { "application/json": { schema: {
-        type: "object", additionalProperties: false, required: ["etsyUrl"], properties: { etsyUrl: { type: "string", format: "uri", description: "HTTP(S) Etsy listing URL containing a numeric listing ID." } },
-      } } } },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["etsyUrl"],
+              properties: {
+                etsyUrl: {
+                  type: "string",
+                  format: "uri",
+                  description:
+                    "HTTP(S) Etsy listing URL containing a numeric listing ID.",
+                },
+              },
+            },
+          },
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              required: ["etsyUrl"],
+              properties: {
+                etsyUrl: {
+                  type: "string",
+                  format: "uri",
+                  description:
+                    "HTTP(S) Etsy listing URL containing a numeric listing ID.",
+                },
+                image: {
+                  type: "string",
+                  format: "binary",
+                  description:
+                    "Optional manual reference image (JPEG, PNG, WEBP up to 10MB). Used when Etsy image extraction fails or is unavailable.",
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
-        "201": jsonSuccess("Research item created successfully.", { type: "object", required: ["researchItem"], properties: { researchItem: { allOf: [{ $ref: "#/components/schemas/ResearchItemSafe" }, { type: "object", required: ["createdById"], properties: { createdById: { type: "string" } } }] } } }),
-        "400": jsonError("Invalid Etsy listing URL."), "401": jsonError("Authentication is required."), "403": jsonError("ADMIN or RESEARCHER role is required."),
-        "409": { description: "The Etsy listing already exists in this workspace.", content: { "application/json": { schema: { allOf: [{ $ref: "#/components/schemas/ApiError" }, { type: "object", properties: { data: { type: "object", required: ["alreadyExists", "researchItemId", "createdBy", "currentStatus", "createdAt"], properties: { alreadyExists: { type: "boolean", enum: [true] }, researchItemId: { type: "string" }, createdBy: { $ref: "#/components/schemas/CreatedBySummary" }, currentStatus: { $ref: "#/components/schemas/ResearchStatus" }, createdAt: { type: "string", format: "date-time" } } } } }] } } } },
+        "201": jsonSuccess("Research item created successfully.", {
+          type: "object",
+          required: ["researchItem"],
+          properties: {
+            researchItem: {
+              allOf: [
+                { $ref: "#/components/schemas/ResearchItemSafe" },
+                {
+                  type: "object",
+                  required: ["createdById"],
+                  properties: { createdById: { type: "string" } },
+                },
+              ],
+            },
+          },
+        }),
+        "400": jsonError("Invalid Etsy listing URL."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN or RESEARCHER role is required."),
+        "409": {
+          description: "The Etsy listing already exists in this workspace.",
+          content: {
+            "application/json": {
+              schema: {
+                allOf: [
+                  { $ref: "#/components/schemas/ApiError" },
+                  {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        required: [
+                          "alreadyExists",
+                          "researchItemId",
+                          "createdBy",
+                          "currentStatus",
+                          "createdAt",
+                        ],
+                        properties: {
+                          alreadyExists: { type: "boolean", enum: [true] },
+                          researchItemId: { type: "string" },
+                          createdBy: {
+                            $ref: "#/components/schemas/CreatedBySummary",
+                          },
+                          currentStatus: {
+                            $ref: "#/components/schemas/ResearchStatus",
+                          },
+                          createdAt: { type: "string", format: "date-time" },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        "422": {
+          description:
+            "Reference image is required when Etsy image extraction fails.",
+          content: {
+            "application/json": {
+              schema: {
+                allOf: [
+                  { $ref: "#/components/schemas/ApiError" },
+                  {
+                    type: "object",
+                    properties: {
+                      message: {
+                        type: "string",
+                        example:
+                          "A reference image is required to create this research item.",
+                      },
+                      data: {
+                        type: "object",
+                        required: ["code"],
+                        properties: {
+                          code: {
+                            type: "string",
+                            enum: ["REFERENCE_IMAGE_REQUIRED"],
+                            example: "REFERENCE_IMAGE_REQUIRED",
+                          },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
       },
     },
     get: {

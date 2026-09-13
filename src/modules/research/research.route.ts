@@ -16,7 +16,10 @@ import {
   updateResearchItem,
   uploadResearchReferenceImage,
 } from "./research.controller.js";
-import { referenceImageUploadMiddleware } from "./research.upload.js";
+import {
+  optionalReferenceImageUploadMiddleware,
+  referenceImageUploadMiddleware,
+} from "./research.upload.js";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -31,6 +34,7 @@ router.post(
   "/",
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER),
+  optionalReferenceImageUploadMiddleware,
   catchAsync(createResearchItem)
 );
 
