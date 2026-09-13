@@ -104,10 +104,11 @@ export type UserActivityRecentItemRole = "RESEARCHER" | "DESIGNER" | "LISTER";
 
 export type UserActivityRecentItem = {
   id: string;
+  researchItemId: string;
   title: string | null;
   status: ResearchStatus;
   activityRole: UserActivityRecentItemRole;
-  updatedAt: string;
+  activityAt: string;
 };
 
 export type UserActivityUserInfo = {

@@ -25,6 +25,170 @@ type ResolvedRangeWithFilter = {
   filter: { gte: Date; lte: Date } | null;
 };
 
+type RecentActivityItem = {
+  id: string;
+  title: string | null;
+  status: ResearchStatus;
+};
+
+type RecentActivityCandidate = {
+  activityAt: Date;
+  activityRole: UserActivityRecentItemRole;
+  id: string;
+  priority: number;
+  researchItem: RecentActivityItem;
+};
+
+type RecentActivityInput = {
+  designAssignments: Array<{
+    assignedAt: Date;
+    completedAt: Date | null;
+    id: string;
+    researchItem: RecentActivityItem;
+    startedAt: Date | null;
+  }>;
+  filter: { gte: Date; lte: Date } | null;
+  listingAssignments: Array<{
+    assignedAt: Date;
+    completedAt: Date | null;
+    id: string;
+    researchItem: RecentActivityItem;
+    startedAt: Date | null;
+  }>;
+  listingResults: Array<{
+    id: string;
+    listedAt: Date;
+    researchItem: RecentActivityItem;
+  }>;
+  researchItems: Array<RecentActivityItem & { createdAt: Date }>;
+  reviewSubmissions: Array<{
+    id: string;
+    researchItem: RecentActivityItem;
+    submittedAt: Date;
+  }>;
+};
+
+function isActivityInRange(
+  activityAt: Date | null,
+  filter: ResolvedRangeWithFilter["filter"],
+): activityAt is Date {
+  return (
+    activityAt !== null &&
+    (!filter || (activityAt >= filter.gte && activityAt <= filter.lte))
+  );
+}
+
+function keepLatestActivity(
+  activities: Map<string, RecentActivityCandidate>,
+  candidate: RecentActivityCandidate,
+) {
+  const existing = activities.get(candidate.researchItem.id);
+  if (
+    !existing ||
+    candidate.activityAt > existing.activityAt ||
+    (candidate.activityAt.getTime() === existing.activityAt.getTime() &&
+      (candidate.priority > existing.priority ||
+        (candidate.priority === existing.priority && candidate.id > existing.id)))
+  ) {
+    activities.set(candidate.researchItem.id, candidate);
+  }
+}
+
+function buildRecentActivityItems({
+  designAssignments,
+  filter,
+  listingAssignments,
+  listingResults,
+  researchItems,
+  reviewSubmissions,
+}: RecentActivityInput): UserActivityRecentItem[] {
+  const designActivities = new Map<string, RecentActivityCandidate>();
+  const listingActivities = new Map<string, RecentActivityCandidate>();
+
+  for (const assignment of designAssignments) {
+    const activityTimes = [
+      { activityAt: assignment.assignedAt, priority: 1 },
+      { activityAt: assignment.startedAt, priority: 2 },
+      { activityAt: assignment.completedAt, priority: 3 },
+    ];
+    for (const { activityAt, priority } of activityTimes) {
+      if (!isActivityInRange(activityAt, filter)) continue;
+      keepLatestActivity(designActivities, {
+        activityAt,
+        activityRole: "DESIGNER",
+        id: assignment.id,
+        priority,
+        researchItem: assignment.researchItem,
+      });
+    }
+  }
+
+  for (const submission of reviewSubmissions) {
+    keepLatestActivity(designActivities, {
+      activityAt: submission.submittedAt,
+      activityRole: "DESIGNER",
+      id: submission.id,
+      priority: 4,
+      researchItem: submission.researchItem,
+    });
+  }
+
+  for (const assignment of listingAssignments) {
+    const activityTimes = [
+      { activityAt: assignment.assignedAt, priority: 1 },
+      { activityAt: assignment.startedAt, priority: 2 },
+      { activityAt: assignment.completedAt, priority: 3 },
+    ];
+    for (const { activityAt, priority } of activityTimes) {
+      if (!isActivityInRange(activityAt, filter)) continue;
+      keepLatestActivity(listingActivities, {
+        activityAt,
+        activityRole: "LISTER",
+        id: assignment.id,
+        priority,
+        researchItem: assignment.researchItem,
+      });
+    }
+  }
+
+  for (const result of listingResults) {
+    keepLatestActivity(listingActivities, {
+      activityAt: result.listedAt,
+      activityRole: "LISTER",
+      id: result.id,
+      priority: 4,
+      researchItem: result.researchItem,
+    });
+  }
+
+  const researchActivities: RecentActivityCandidate[] = researchItems.map(
+    (item) => ({
+      activityAt: item.createdAt,
+      activityRole: "RESEARCHER",
+      id: item.id,
+      priority: 1,
+      researchItem: item,
+    }),
+  );
+
+  return [...researchActivities, ...designActivities.values(), ...listingActivities.values()]
+    .sort(
+      (left, right) =>
+        right.activityAt.getTime() - left.activityAt.getTime() ||
+        right.priority - left.priority ||
+        right.id.localeCompare(left.id),
+    )
+    .slice(0, 15)
+    .map((activity) => ({
+      activityAt: activity.activityAt.toISOString(),
+      activityRole: activity.activityRole,
+      id: activity.id,
+      researchItemId: activity.researchItem.id,
+      status: activity.researchItem.status,
+      title: activity.researchItem.title,
+    }));
+}
+
 // Resolves query parameters into a normalized UTC date range and Prisma filter.
 export const resolveDashboardDateRange = (
   query: DashboardOverviewQueryInput,
@@ -822,64 +986,109 @@ export const getUserActivity = async (
         }),
       ]);
 
-  const recentItemsPromise = prisma.researchItem.findMany({
+  const recentResearchPromise = prisma.researchItem.findMany({
     where: {
       workspaceId,
-      OR: [
-        { createdById: userId },
-        {
-          designAssignments: {
-            some: {
-              designerId: userId,
-              isCurrent: true,
-            },
-          },
-        },
-        {
-          listingAssignments: {
-            some: {
-              listerId: userId,
-              isCurrent: true,
-            },
-          },
-        },
-      ],
+      createdById: userId,
+      ...(filter ? { createdAt: filter } : {}),
     },
     select: {
       id: true,
       title: true,
       status: true,
-      updatedAt: true,
-      createdById: true,
-      designAssignments: {
-        where: {
-          designerId: userId,
-          isCurrent: true,
-        },
-        select: {
-          id: true,
-        },
-      },
-      listingAssignments: {
-        where: {
-          listerId: userId,
-          isCurrent: true,
-        },
-        select: {
-          id: true,
-        },
-      },
+      createdAt: true,
     },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    take: 15,
   });
 
-  const [researchCount, designMetrics, listingMetrics, rawRecentItems] =
+  const recentDesignPromise = Promise.all([
+    prisma.designAssignment.findMany({
+      where: {
+        designerId: userId,
+        researchItem: { workspaceId },
+        ...(filter
+          ? {
+              OR: [
+                { assignedAt: filter },
+                { startedAt: filter },
+                { completedAt: filter },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        assignedAt: true,
+        startedAt: true,
+        completedAt: true,
+        researchItem: { select: { id: true, title: true, status: true } },
+      },
+    }),
+    prisma.reviewSubmission.findMany({
+      where: {
+        designerId: userId,
+        researchItem: { workspaceId },
+        ...(filter ? { submittedAt: filter } : {}),
+      },
+      select: {
+        id: true,
+        submittedAt: true,
+        researchItem: { select: { id: true, title: true, status: true } },
+      },
+    }),
+  ]);
+
+  const recentListingPromise = Promise.all([
+    prisma.listingAssignment.findMany({
+      where: {
+        listerId: userId,
+        researchItem: { workspaceId },
+        ...(filter
+          ? {
+              OR: [
+                { assignedAt: filter },
+                { startedAt: filter },
+                { completedAt: filter },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        assignedAt: true,
+        startedAt: true,
+        completedAt: true,
+        researchItem: { select: { id: true, title: true, status: true } },
+      },
+    }),
+    prisma.listingResult.findMany({
+      where: {
+        listedById: userId,
+        researchItem: { workspaceId },
+        ...(filter ? { listedAt: filter } : {}),
+      },
+      select: {
+        id: true,
+        listedAt: true,
+        researchItem: { select: { id: true, title: true, status: true } },
+      },
+    }),
+  ]);
+
+  const [
+    researchCount,
+    designMetrics,
+    listingMetrics,
+    recentResearchItems,
+    [recentDesignAssignments, recentReviewSubmissions],
+    [recentListingAssignments, recentListingResults],
+  ] =
     await Promise.all([
       researchPromise,
       designPromise,
       listingPromise,
-      recentItemsPromise,
+      recentResearchPromise,
+      recentDesignPromise,
+      recentListingPromise,
     ]);
 
   const researchSummary: UserActivitySummaryResearch | null =
@@ -910,23 +1119,13 @@ export const getUserActivity = async (
         }
       : null;
 
-  const recentItems: UserActivityRecentItem[] = rawRecentItems.map((item) => {
-    let activityRole: UserActivityRecentItemRole;
-    if (item.listingAssignments.length > 0) {
-      activityRole = "LISTER";
-    } else if (item.designAssignments.length > 0) {
-      activityRole = "DESIGNER";
-    } else {
-      activityRole = "RESEARCHER";
-    }
-
-    return {
-      id: item.id,
-      title: item.title,
-      status: item.status,
-      activityRole,
-      updatedAt: item.updatedAt.toISOString(),
-    };
+  const recentItems = buildRecentActivityItems({
+    filter,
+    listingAssignments: recentListingAssignments,
+    listingResults: recentListingResults,
+    researchItems: recentResearchItems,
+    designAssignments: recentDesignAssignments,
+    reviewSubmissions: recentReviewSubmissions,
   });
 
   return {
