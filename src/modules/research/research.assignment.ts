@@ -1,6 +1,7 @@
 import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
+import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import { BacklogSyncResult } from "./research.type.js";
 
 // Statuses that count as active work in a Designer's current queue.
@@ -140,6 +141,8 @@ export const assignUnassignedResearchBacklog = async (
     try {
       const outcome = await prisma.$transaction(
         async (tx) => {
+          await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
           // Re-query workload inside the transaction so each iteration reflects
           // workload updates from assignments committed in prior loop iterations.
           const designerId = await findLeastWorkloadDesigner(tx, workspaceId);

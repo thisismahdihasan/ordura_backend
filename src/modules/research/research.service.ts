@@ -29,6 +29,7 @@ import {
   ReferenceImageDestroyer,
 } from "./research.storage.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
+import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 
 export const safeResearchItemSelect = {
   id: true,
@@ -113,6 +114,8 @@ export const createResearchItem = async (
   // 3. Atomically create ResearchItem and auto-assign eligible designer if available
   try {
     const createdItem = await prisma.$transaction(async (tx) => {
+      await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
       const chosenDesignerId = await findLeastWorkloadDesigner(
         tx,
         workspaceId
@@ -721,6 +724,8 @@ export const reassignResearchDesigner = async (
     if (!REASSIGNABLE_STATUSES.includes(lockedItem.status)) {
       throw new ApiError(409, "Research item can no longer be reassigned");
     }
+
+    await acquireWorkspaceMemberMutationLock(tx, workspaceId);
 
     // 4. Validate target designer in same workspace
     const targetMember = await tx.workspaceMember.findUnique({

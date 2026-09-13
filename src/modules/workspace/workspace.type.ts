@@ -47,3 +47,11 @@ export type WorkspaceMemberListItem = {
 export type GetWorkspaceMembersResult = {
   members: WorkspaceMemberListItem[];
 };
+
+export type UpdateWorkspaceMemberRolesResult = {
+  member: WorkspaceMemberListItem;
+};
+
+export type DeleteWorkspaceMemberResult = {
+  userId: string;
+};

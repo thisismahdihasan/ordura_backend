@@ -5,8 +5,10 @@ import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   createWorkspace,
+  deleteWorkspaceMember,
   getWorkspaceMembers,
   getUserWorkspaces,
+  updateWorkspaceMemberRoles,
 } from "./workspace.controller.js";
 import {
   createWorkspaceInvite,
@@ -54,6 +56,18 @@ router.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(getWorkspaceMembers)
+);
+router.patch(
+  "/:workspaceId/members/:userId/roles",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(updateWorkspaceMemberRoles)
+);
+router.delete(
+  "/:workspaceId/members/:userId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(deleteWorkspaceMember)
 );
 router.use("/:workspaceId/research-items", ResearchRoutes);
 router.use("/:workspaceId/designer", DesignerRoutes);

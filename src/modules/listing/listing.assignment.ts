@@ -4,6 +4,7 @@ import {
   ListerWorkload,
   NOTIFICATION_TYPE_LISTING_ASSIGNED,
 } from "./listing.type.js";
+import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 
 export const ACTIVE_LISTING_WORKLOAD_STATUSES: ResearchStatus[] = [
   ResearchStatus.READY_FOR_LISTING,
@@ -89,10 +90,13 @@ export const assignLeastWorkloadLister = async (
   workspaceId: string,
   researchItemId: string
 ): Promise<AssignListerResult> => {
-  // 1. Acquire workspace-scoped advisory transaction lock
+  // 1. Serialize eligibility with workspace member role changes before selecting a lister.
+  await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
+  // 2. Acquire workspace-scoped advisory transaction lock
   await acquireWorkspaceListerLock(tx, workspaceId);
 
-  // 2. Scoped item verification: must belong to workspace and be READY_FOR_LISTING
+  // 3. Scoped item verification: must belong to workspace and be READY_FOR_LISTING
   const item = await tx.researchItem.findFirst({
     where: {
       id: researchItemId,
@@ -108,7 +112,7 @@ export const assignLeastWorkloadLister = async (
     return null;
   }
 
-  // 3. Existing current assignment check: strictly never reassign or overwrite current work
+  // 4. Existing current assignment check: strictly never reassign or overwrite current work
   const existingAssignment = await tx.listingAssignment.findFirst({
     where: {
       researchItemId,
@@ -130,7 +134,7 @@ export const assignLeastWorkloadLister = async (
     };
   }
 
-  // 4. Find least-workload eligible lister
+  // 5. Find least-workload eligible lister
   const chosenListerId = await findLeastWorkloadLister(tx, workspaceId);
 
   if (!chosenListerId) {
@@ -138,7 +142,7 @@ export const assignLeastWorkloadLister = async (
     return null;
   }
 
-  // 5. Create new current ListingAssignment
+  // 6. Create new current ListingAssignment
   const newAssignment = await tx.listingAssignment.create({
     data: {
       researchItemId,
@@ -152,7 +156,7 @@ export const assignLeastWorkloadLister = async (
     },
   });
 
-  // 6. Create exactly one in-app notification for the newly assigned lister
+  // 7. Create exactly one in-app notification for the newly assigned lister
   await tx.notification.create({
     data: {
       workspaceId,

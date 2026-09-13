@@ -1,3 +1,4 @@
+import { WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 
 export const createWorkspaceSchema = z.object({
@@ -13,3 +14,21 @@ export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export const workspaceIdParamsSchema = z.object({
   workspaceId: z.string().trim().min(1, "Workspace ID is required"),
 }).strict();
+
+export const workspaceMemberParamsSchema = workspaceIdParamsSchema.extend({
+  userId: z.string().trim().min(1, "User ID is required"),
+}).strict();
+
+export const updateWorkspaceMemberRolesSchema = z.object({
+  roles: z
+    .array(z.enum(WorkspaceRole))
+    .min(1, "At least one workspace role is required")
+    .refine(
+      (roles) => new Set(roles).size === roles.length,
+      "Workspace roles must be unique"
+    ),
+}).strict();
+
+export type UpdateWorkspaceMemberRolesInput = z.infer<
+  typeof updateWorkspaceMemberRolesSchema
+>;

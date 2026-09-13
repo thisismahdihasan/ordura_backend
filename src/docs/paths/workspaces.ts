@@ -31,6 +31,33 @@ const pendingInviteData = {
   },
 };
 
+const workspaceMemberData = {
+  type: "object",
+  required: ["membershipId", "userId", "name", "email", "roles", "joinedAt"],
+  properties: {
+    membershipId: { type: "string" },
+    userId: { type: "string" },
+    name: { type: "string", nullable: true },
+    email: { type: "string", format: "email" },
+    roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } },
+    joinedAt: { type: "string", format: "date-time" },
+  },
+};
+
+const workspaceMemberRolesBody = {
+  type: "object",
+  additionalProperties: false,
+  required: ["roles"],
+  properties: {
+    roles: {
+      type: "array",
+      minItems: 1,
+      uniqueItems: true,
+      items: { $ref: "#/components/schemas/WorkspaceRole" },
+    },
+  },
+};
+
 export const workspacePaths: OpenApiPathMap = {
   "/api/v1/workspaces": {
     get: {
@@ -132,23 +159,53 @@ export const workspacePaths: OpenApiPathMap = {
           properties: {
             members: {
               type: "array",
-              items: {
-                type: "object",
-                required: ["membershipId", "userId", "name", "email", "roles", "joinedAt"],
-                properties: {
-                  membershipId: { type: "string" },
-                  userId: { type: "string" },
-                  name: { type: "string", nullable: true },
-                  email: { type: "string", format: "email" },
-                  roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } },
-                  joinedAt: { type: "string", format: "date-time" },
-                },
-              },
+              items: workspaceMemberData,
             },
           },
         }),
         "401": jsonError("Authentication is required."),
         "403": jsonError("Explicit ADMIN role is required."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/members/{userId}/roles": {
+    patch: {
+      tags: ["Workspaces"],
+      summary: "Replace a workspace member's roles",
+      description: "ADMIN only. Replaces the member's explicit role array and blocks removal of the last Admin or a role with active assigned work.",
+      security: [{ cookieAuth: [] }],
+      parameters: [
+        { $ref: "#/components/parameters/WorkspaceId" },
+        { name: "userId", in: "path", required: true, schema: { type: "string", minLength: 1 } },
+      ],
+      requestBody: { required: true, content: { "application/json": { schema: workspaceMemberRolesBody } } },
+      responses: {
+        "200": jsonSuccess("Workspace member roles updated successfully", { type: "object", required: ["member"], properties: { member: workspaceMemberData } }),
+        "400": jsonError("Invalid member parameters or roles body."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Explicit ADMIN role is required."),
+        "404": jsonError("Workspace member not found"),
+        "409": jsonError("Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/members/{userId}": {
+    delete: {
+      tags: ["Workspaces"],
+      summary: "Remove a workspace member",
+      description: "ADMIN only. Deletes only the WorkspaceMember row; user-owned workflow and audit history remains intact. Blocks removal of the last Admin or a member with active Designer/Lister work.",
+      security: [{ cookieAuth: [] }],
+      parameters: [
+        { $ref: "#/components/parameters/WorkspaceId" },
+        { name: "userId", in: "path", required: true, schema: { type: "string", minLength: 1 } },
+      ],
+      responses: {
+        "200": jsonSuccess("Workspace member removed successfully", { type: "object", required: ["userId"], properties: { userId: { type: "string" } } }),
+        "400": jsonError("Invalid member parameters."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Explicit ADMIN role is required."),
+        "404": jsonError("Workspace member not found"),
+        "409": jsonError("Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
       },
     },
   },
