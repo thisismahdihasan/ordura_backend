@@ -107,12 +107,7 @@ router.delete(
 router.get(
   "/:researchItemId",
   requireAuth,
-  requireWorkspaceRole(
-    WorkspaceRole.ADMIN,
-    WorkspaceRole.RESEARCHER,
-    WorkspaceRole.DESIGNER,
-    WorkspaceRole.LISTER
-  ),
+  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER),
   catchAsync(getResearchItemById)
 );
 

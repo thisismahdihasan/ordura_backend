@@ -590,7 +590,7 @@ export const getResearchReviewActivityMap = async (
   return map;
 };
 
-// Fetches details for a single research item scoped strictly to the specified workspace.
+// Fetches details for a single research item owned by the Researcher unless the caller is an Admin.
 export const getResearchItemById = async (
   workspaceId: string,
   researchItemId: string,
@@ -601,21 +601,13 @@ export const getResearchItemById = async (
     where: {
       id: researchItemId,
       workspaceId,
+      ...(roles.includes(WorkspaceRole.ADMIN) ? {} : { createdById: userId }),
     },
     select: safeResearchItemDetailSelect,
   });
 
   if (!researchItem) {
     throw new ApiError(404, "Research item not found");
-  }
-
-  const hasBroaderResearchAccess =
-    roles.includes(WorkspaceRole.ADMIN) ||
-    roles.includes(WorkspaceRole.RESEARCHER) ||
-    roles.includes(WorkspaceRole.DESIGNER);
-
-  if (roles.includes(WorkspaceRole.LISTER) && !hasBroaderResearchAccess) {
-    await assertCurrentListingAssignmentOwnership(researchItemId, userId);
   }
 
   const currentAssignment = researchItem.designAssignments[0] ?? null;
@@ -687,7 +679,7 @@ export const getReferenceImageData = async (
   };
 };
 
-// Preserves research-management access while requiring designer-only users to own the current assignment.
+// Resolves protected reference media for Admins, Researcher owners, and assigned Designer/Lister workflows.
 export const getAuthorizedReferenceImageData = async (
   workspaceId: string,
   researchItemId: string,
@@ -701,6 +693,7 @@ export const getAuthorizedReferenceImageData = async (
     },
     select: {
       id: true,
+      createdById: true,
       referenceImageUrl: true,
       designAssignments: {
         where: { isCurrent: true },
@@ -717,14 +710,14 @@ export const getAuthorizedReferenceImageData = async (
     throw new ApiError(404, "Research item not found");
   }
 
-  const hasResearchManagementRole =
-    roles.includes(WorkspaceRole.ADMIN) ||
-    roles.includes(WorkspaceRole.RESEARCHER);
+  const hasAdminAccess = roles.includes(WorkspaceRole.ADMIN);
+  const hasResearcherOwnership =
+    roles.includes(WorkspaceRole.RESEARCHER) && item.createdById === userId;
   const hasCurrentDesignerAccess =
     roles.includes(WorkspaceRole.DESIGNER) &&
     item.designAssignments[0]?.designerId === userId;
 
-  if (!hasResearchManagementRole && !hasCurrentDesignerAccess) {
+  if (!hasAdminAccess && !hasResearcherOwnership && !hasCurrentDesignerAccess) {
     if (roles.includes(WorkspaceRole.LISTER)) {
       await assertCurrentListingAssignmentOwnership(researchItemId, userId);
     } else {
@@ -956,13 +949,18 @@ export type UploadReferenceImageOptions = {
 export const uploadResearchReferenceImage = async (
   workspaceId: string,
   researchItemId: string,
+  actorUserId: string,
+  actorRoles: readonly WorkspaceRole[],
   file: { buffer: Buffer; mimetype: string },
   options?: UploadReferenceImageOptions
 ): Promise<ManualReferenceImageUploadResult> => {
-  const existingItem = await prisma.researchItem.findUnique({
+  const existingItem = await prisma.researchItem.findFirst({
     where: {
       id: researchItemId,
       workspaceId,
+      ...(actorRoles.includes(WorkspaceRole.ADMIN)
+        ? {}
+        : { createdById: actorUserId }),
     },
     select: {
       id: true,

@@ -248,6 +248,7 @@ export const uploadResearchReferenceImage = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
   const { workspaceId, researchItemId } = getResearchItemParamsSchema.parse(
     req.params
   );
@@ -259,6 +260,8 @@ export const uploadResearchReferenceImage = async (
   const result = await researchService.uploadResearchReferenceImage(
     workspaceId,
     researchItemId,
+    authReq.user.id,
+    authReq.workspaceMembership.roles,
     {
       buffer: req.file.buffer,
       mimetype: req.file.mimetype,

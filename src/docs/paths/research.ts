@@ -332,7 +332,7 @@ export const researchPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/research-items/{researchItemId}": {
     get: {
       tags: ["Research"], summary: "Get one workspace research item", security: [{ cookieAuth: [] }], parameters: workspaceAndResearchParameters,
-      description: "ADMIN, RESEARCHER, and DESIGNER retain existing workspace access. LISTER-only callers must own the current ListingAssignment for this research item.",
+      description: "ADMIN users may retrieve any workspace item. RESEARCHER users may retrieve only items they created. DESIGNER and LISTER workflows use their assignment-scoped endpoints instead.",
       responses: { "200": jsonSuccess("Research item retrieved successfully.", { type: "object", required: ["researchItem"], properties: { researchItem: researchDetailItem } }), "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Research item was not found.") },
     },
     patch: {
@@ -405,7 +405,7 @@ export const researchPaths: OpenApiPathMap = {
       summary: "Manually upload or replace reference image",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit ADMIN or RESEARCHER role required. Uploads a manual reference image (JPEG, PNG, WebP up to 10MB) to managed storage. Replaces any previous managed image safely.",
+        "ADMIN users may replace any workspace item's image. RESEARCHER users may replace only images on items they created. Authorization is verified before any managed-storage upload or replacement side effect.",
       parameters: workspaceAndResearchParameters,
       requestBody: {
         required: true,
@@ -442,7 +442,7 @@ export const researchPaths: OpenApiPathMap = {
     },
     get: {
       tags: ["Research"], summary: "Proxy a research reference image", security: [{ cookieAuth: [] }],
-      description: "Returns a protected binary image. ADMIN and RESEARCHER retain research-management access; DESIGNER callers must own the current design assignment unless another broader role applies; LISTER callers must own the current listing assignment unless another authorized role applies. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
+      description: "Returns a protected binary image. ADMIN users may access any workspace item; RESEARCHER users may access only items they created. Existing DESIGNER and LISTER assigned-work UIs use this media endpoint and must own the current design or listing assignment respectively. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
       parameters: [...workspaceAndResearchParameters, { name: "download", in: "query", schema: { type: "string", enum: ["true", "false", "1", "0"] } }],
       responses: { "200": { description: "Image stream with image Content-Type and Content-Disposition.", headers: { "Content-Disposition": { schema: { type: "string" } }, "Cache-Control": { schema: { type: "string" } } }, content: { "image/*": { schema: { type: "string", format: "binary" } } } }, "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Item or reference image was not found."), "502": jsonError("Reference image could not be safely loaded."), "504": jsonError("Reference image request timed out.") },
     },
