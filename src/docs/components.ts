@@ -136,11 +136,12 @@ export const openApiComponents = {
     },
     UserSummary: {
       type: "object",
-      required: ["id", "email", "name", "createdAt"],
+      required: ["id", "email", "name", "profileImageUrl", "createdAt"],
       properties: {
         id: stringId,
         email: { type: "string", format: "email" },
         name: { type: "string", nullable: true },
+        profileImageUrl: { type: "string", format: "uri", nullable: true },
         createdAt: dateTime,
       },
     },

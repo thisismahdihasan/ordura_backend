@@ -15,8 +15,10 @@ import {
   registerUser,
   requestPasswordReset,
   resetPassword,
+  updateProfile,
   verifyPasswordResetOtp,
 } from "./auth.controller.js";
+import { avatarUploadMiddleware } from "./auth.upload.js";
 
 const router: Router = Router();
 
@@ -24,6 +26,12 @@ router.post("/register", registerRateLimiter, catchAsync(registerUser));
 router.post("/login", loginRateLimiter, catchAsync(loginUser));
 router.post("/logout", catchAsync(logoutUser));
 router.get("/me", requireAuth, catchAsync(getCurrentUser));
+router.patch(
+  "/profile",
+  requireAuth,
+  avatarUploadMiddleware,
+  catchAsync(updateProfile)
+);
 
 router.post(
   "/forgot-password/request",

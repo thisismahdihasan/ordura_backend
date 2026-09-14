@@ -10,6 +10,7 @@ import {
   forgotPasswordVerifySchema,
   loginSchema,
   registerSchema,
+  updateProfileSchema,
 } from "./auth.validation.js";
 
 // Registers a new user account and sets the authentication session cookie.
@@ -68,6 +69,33 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
     message: "Current user profile retrieved successfully",
     data: {
       user: authReq.user,
+    },
+  });
+};
+
+// Updates the authenticated user's profile information (name and/or profile photo).
+export const updateProfile = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const validatedInput = updateProfileSchema.parse(req.body);
+
+  const file = req.file
+    ? { buffer: req.file.buffer, mimetype: req.file.mimetype }
+    : undefined;
+
+  const user = await authService.updateUserProfile(
+    authReq.user.id,
+    validatedInput,
+    file
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Profile updated successfully",
+    data: {
+      user,
     },
   });
 };

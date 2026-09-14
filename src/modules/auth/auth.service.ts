@@ -26,12 +26,21 @@ import {
   ForgotPasswordVerifyInput,
   LoginInput,
   RegisterInput,
+  UpdateProfileInput,
 } from "./auth.validation.js";
+import {
+  AvatarDestroyer,
+  AvatarUploader,
+  AvatarUploadResult,
+  destroyAvatarFromCloudinary,
+  uploadAvatarToCloudinary,
+} from "./auth.storage.js";
 
 const safeUserSelect = {
   id: true,
   email: true,
   name: true,
+  profileImageUrl: true,
   createdAt: true,
 } as const;
 
@@ -90,6 +99,7 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
       id: true,
       email: true,
       name: true,
+      profileImageUrl: true,
       passwordHash: true,
       tokenVersion: true,
       createdAt: true,
@@ -118,6 +128,7 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
     id: user.id,
     email: user.email,
     name: user.name,
+    profileImageUrl: user.profileImageUrl,
     createdAt: user.createdAt,
   };
 
@@ -156,6 +167,7 @@ export const getUserAuthSession = async (
       id: record.id,
       email: record.email,
       name: record.name,
+      profileImageUrl: record.profileImageUrl,
       createdAt: record.createdAt,
     },
     tokenVersion: record.tokenVersion,
@@ -392,4 +404,117 @@ export const resetPasswordWithToken = async (
     message:
       "Password reset successfully. Please sign in with your new password.",
   };
+};
+
+export type UpdateUserProfileOptions = {
+  uploader?: AvatarUploader;
+  destroyer?: AvatarDestroyer;
+};
+
+const safelyDestroyAvatar = async (
+  publicId: string,
+  destroyer: AvatarDestroyer
+): Promise<void> => {
+  try {
+    await destroyer(publicId);
+  } catch {
+    // The database update is already durable; cleanup can be retried operationally.
+    console.warn("Avatar cleanup failed after profile update");
+  }
+};
+
+// Updates authenticated user's profile (name and/or avatar) with safe replacement and rollback on error.
+export const updateUserProfile = async (
+  userId: string,
+  input: UpdateProfileInput,
+  file?: { buffer: Buffer; mimetype: string },
+  options?: UpdateUserProfileOptions
+): Promise<SafeUser> => {
+  // 1. Conflict validation: cannot both provide a new avatar and request removal
+  if (file && input.removeAvatar) {
+    throw new ApiError(
+      400,
+      "Cannot upload a new avatar and remove avatar in the same request"
+    );
+  }
+
+  // 2. Completeness validation: at least one editable field must be provided
+  const hasName = input.name !== undefined;
+  const hasAvatar = file !== undefined;
+  const hasRemoveAvatar = input.removeAvatar === true;
+
+  if (!hasName && !hasAvatar && !hasRemoveAvatar) {
+    throw new ApiError(
+      400,
+      "At least one editable field (name, avatar, or removeAvatar) must be provided"
+    );
+  }
+
+  // 3. Ensure target user exists and retrieve current avatar metadata
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      profileImagePublicId: true,
+    },
+  });
+
+  if (!existingUser) {
+    throw new ApiError(404, "User account not found");
+  }
+
+  const uploader = options?.uploader ?? uploadAvatarToCloudinary;
+  const destroyer = options?.destroyer ?? destroyAvatarFromCloudinary;
+
+  let newUploadResult: AvatarUploadResult | null = null;
+
+  // 4. Upload new avatar to Cloudinary if provided
+  if (file) {
+    newUploadResult = await uploader({
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+    });
+  }
+
+  // 5. Construct database update payload restricted strictly to name and profile image
+  const dataToUpdate: Prisma.UserUpdateInput = {};
+
+  if (hasName && input.name !== undefined) {
+    dataToUpdate.name = input.name;
+  }
+
+  if (newUploadResult) {
+    dataToUpdate.profileImageUrl = newUploadResult.secureUrl;
+    dataToUpdate.profileImagePublicId = newUploadResult.publicId;
+  } else if (hasRemoveAvatar) {
+    dataToUpdate.profileImageUrl = null;
+    dataToUpdate.profileImagePublicId = null;
+  }
+
+  // 6. Persist changes to database with rollback of newly uploaded asset on failure
+  let updatedUser: SafeUser;
+  try {
+    updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: dataToUpdate,
+      select: safeUserSelect,
+    });
+  } catch (dbError) {
+    if (newUploadResult) {
+      await safelyDestroyAvatar(newUploadResult.publicId, destroyer);
+    }
+    throw dbError;
+  }
+
+  // 7. On database update success, clean up previously stored Cloudinary asset if replaced or removed
+  if (
+    existingUser.profileImagePublicId &&
+    (newUploadResult || hasRemoveAvatar)
+  ) {
+    if (existingUser.profileImagePublicId !== newUploadResult?.publicId) {
+      await safelyDestroyAvatar(existingUser.profileImagePublicId, destroyer);
+    }
+  }
+
+  return updatedUser;
 };

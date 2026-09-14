@@ -82,3 +82,23 @@ export type ForgotPasswordVerifyInput = z.infer<
 export type ForgotPasswordResetInput = z.infer<
   typeof forgotPasswordResetSchema
 >;
+
+export const updateProfileSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name cannot be empty")
+      .max(100, "Name must not exceed 100 characters")
+      .optional(),
+    removeAvatar: z
+      .preprocess((val) => {
+        if (val === "true" || val === true || val === "1") return true;
+        if (val === "false" || val === false || val === "0") return false;
+        return val;
+      }, z.boolean().optional())
+      .optional(),
+  })
+  .strict();
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

@@ -67,6 +67,48 @@ export const authPaths: OpenApiPathMap = {
       },
     },
   },
+  "/api/v1/auth/profile": {
+    patch: {
+      tags: ["Auth"],
+      summary: "Update authenticated user profile",
+      description: "Self-profile update for full name and/or avatar. Accepts multipart/form-data. Target user is inferred directly from session context.",
+      security: [{ cookieAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              properties: {
+                name: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 100,
+                  description: "Full user name (1-100 characters)",
+                },
+                avatar: {
+                  type: "string",
+                  format: "binary",
+                  description: "Profile avatar image (JPEG, PNG, or WebP; max 5MB)",
+                },
+                removeAvatar: {
+                  type: "string",
+                  enum: ["true", "false", "1", "0"],
+                  description: "Set to true to remove existing avatar without replacement",
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": jsonSuccess("Profile updated successfully.", userData),
+        "400": jsonError("Invalid profile update payload, unsupported file, or conflicting fields."),
+        "401": jsonError("Authentication is required."),
+        "404": jsonError("User account not found."),
+      },
+    },
+  },
   "/api/v1/auth/forgot-password/request": {
     post: {
       tags: ["Auth"],
