@@ -12,6 +12,11 @@ export type AuthResult = {
 
 export type JwtPayload = {
   userId: string;
+  tokenVersion: number;
+};
+
+export type ForgotPasswordVerifyResult = {
+  resetToken: string;
 };
 
 export type CookieOptions = {

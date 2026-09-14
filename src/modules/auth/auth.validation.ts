@@ -29,3 +29,56 @@ export const loginSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const forgotPasswordRequestSchema = z.object({
+  email: z
+    .string({ message: "Email is required" })
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address"),
+});
+
+export const forgotPasswordVerifySchema = z.object({
+  email: z
+    .string({ message: "Email is required" })
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address"),
+  code: z
+    .string({ message: "Verification code is required" })
+    .trim()
+    .regex(/^\d{6}$/, "Verification code must be exactly 6 digits"),
+});
+
+export const forgotPasswordResetSchema = z
+  .object({
+    email: z
+      .string({ message: "Email is required" })
+      .trim()
+      .toLowerCase()
+      .email("Invalid email address"),
+    resetToken: z
+      .string({ message: "Reset token is required" })
+      .trim()
+      .min(1, "Reset token is required"),
+    password: z
+      .string({ message: "Password is required" })
+      .min(8, "Password must be at least 8 characters long"),
+    confirmPassword: z
+      .string({ message: "Confirm password is required" })
+      .min(1, "Confirm password is required"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export type ForgotPasswordRequestInput = z.infer<
+  typeof forgotPasswordRequestSchema
+>;
+export type ForgotPasswordVerifyInput = z.infer<
+  typeof forgotPasswordVerifySchema
+>;
+export type ForgotPasswordResetInput = z.infer<
+  typeof forgotPasswordResetSchema
+>;

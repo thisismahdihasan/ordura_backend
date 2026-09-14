@@ -3,14 +3,14 @@ import { env } from "../config/env.js";
 import { ApiError } from "../shared/ApiError.js";
 import { catchAsync } from "../utils/catchAsync.js";
 import { verifyAuthToken } from "../modules/auth/auth.helper.js";
-import { getUserById } from "../modules/auth/auth.service.js";
-import { SafeUser } from "../modules/auth/auth.type.js";
+import { getUserAuthSession } from "../modules/auth/auth.service.js";
+import { JwtPayload, SafeUser } from "../modules/auth/auth.type.js";
 
 export type AuthenticatedRequest = Request & {
   user: SafeUser;
 };
 
-// Enforces authentication cookie presence, validates JWT integrity, and attaches user profile to request.
+// Enforces authentication cookie presence, validates JWT integrity and tokenVersion, and attaches user profile.
 export const requireAuth = catchAsync(
   async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const token = req.cookies?.[env.COOKIE_NAME];
@@ -19,21 +19,24 @@ export const requireAuth = catchAsync(
       throw new ApiError(401, "Authentication required");
     }
 
-    let userId: string;
+    let payload: JwtPayload;
     try {
-      const payload = verifyAuthToken(token);
-      userId = payload.userId;
+      payload = verifyAuthToken(token);
     } catch {
       throw new ApiError(401, "Invalid or expired authentication token");
     }
 
-    const user = await getUserById(userId);
+    const authSession = await getUserAuthSession(payload.userId);
 
-    if (!user) {
+    if (!authSession) {
       throw new ApiError(401, "User account no longer exists");
     }
 
-    (req as AuthenticatedRequest).user = user;
+    if (authSession.tokenVersion !== payload.tokenVersion) {
+      throw new ApiError(401, "Invalid or expired authentication token");
+    }
+
+    (req as AuthenticatedRequest).user = authSession.user;
 
     next();
   }

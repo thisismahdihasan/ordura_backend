@@ -27,3 +27,30 @@ export const registerRateLimiter = rateLimit({
   legacyHeaders: false,
   handler: sendRateLimitResponse,
 });
+
+// Limits password reset OTP requests per process and client IP.
+export const forgotPasswordRequestRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: sendRateLimitResponse,
+});
+
+// Limits password reset OTP verification attempts per process and client IP.
+export const forgotPasswordVerifyRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: sendRateLimitResponse,
+});
+
+// Limits password reset submissions per process and client IP.
+export const forgotPasswordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: sendRateLimitResponse,
+});

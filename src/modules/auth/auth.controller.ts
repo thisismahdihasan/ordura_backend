@@ -4,7 +4,13 @@ import { AuthenticatedRequest } from "../../middleware/requireAuth.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import { getAuthCookieOptions, getLogoutCookieOptions } from "./auth.helper.js";
 import * as authService from "./auth.service.js";
-import { loginSchema, registerSchema } from "./auth.validation.js";
+import {
+  forgotPasswordResetSchema,
+  forgotPasswordRequestSchema,
+  forgotPasswordVerifySchema,
+  loginSchema,
+  registerSchema,
+} from "./auth.validation.js";
 
 // Registers a new user account and sets the authentication session cookie.
 export const registerUser = async (
@@ -63,5 +69,52 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
     data: {
       user: authReq.user,
     },
+  });
+};
+
+// Initiates the forgot password flow by requesting an email OTP.
+export const requestPasswordReset = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const validatedInput = forgotPasswordRequestSchema.parse(req.body);
+  const result = await authService.requestPasswordReset(validatedInput);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: result.message,
+  });
+};
+
+// Verifies the 6-digit email OTP and produces a short-lived opaque reset token.
+export const verifyPasswordResetOtp = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const validatedInput = forgotPasswordVerifySchema.parse(req.body);
+  const result = await authService.verifyPasswordResetOtp(validatedInput);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Verification successful.",
+    data: {
+      resetToken: result.resetToken,
+    },
+  });
+};
+
+// Resets the user password using a verified reset token and clears current browser cookie.
+export const resetPassword = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const validatedInput = forgotPasswordResetSchema.parse(req.body);
+  const result = await authService.resetPasswordWithToken(validatedInput);
+
+  res.clearCookie(env.COOKIE_NAME, getLogoutCookieOptions());
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: result.message,
   });
 };
