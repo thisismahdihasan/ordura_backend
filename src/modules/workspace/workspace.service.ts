@@ -6,6 +6,7 @@ import { ACTIVE_DESIGN_STATUSES } from "../research/research.assignment.js";
 import { acquireWorkspaceMemberMutationLock } from "./workspace.member-lock.js";
 import {
   CreateWorkspaceInput,
+  UpdateWorkspaceMemberAssignmentAvailabilityInput,
   UpdateWorkspaceMemberRolesInput,
 } from "./workspace.validation.js";
 import {
@@ -13,6 +14,7 @@ import {
   DeleteWorkspaceMemberResult,
   GetWorkspaceMembersResult,
   GetUserWorkspacesResult,
+  UpdateWorkspaceMemberAssignmentAvailabilityResult,
   UpdateWorkspaceMemberRolesResult,
 } from "./workspace.type.js";
 
@@ -36,6 +38,10 @@ const safeWorkspaceMemberListSelect = {
   id: true,
   userId: true,
   roles: true,
+  designerAssignmentEnabled: true,
+  designerAssignmentPausedUntil: true,
+  listerAssignmentEnabled: true,
+  listerAssignmentPausedUntil: true,
   createdAt: true,
   user: {
     select: {
@@ -49,6 +55,10 @@ const toWorkspaceMemberListItem = (membership: {
   id: string;
   userId: string;
   roles: WorkspaceRole[];
+  designerAssignmentEnabled: boolean;
+  designerAssignmentPausedUntil: Date | null;
+  listerAssignmentEnabled: boolean;
+  listerAssignmentPausedUntil: Date | null;
   createdAt: Date;
   user: { name: string | null; email: string };
 }) => ({
@@ -57,6 +67,10 @@ const toWorkspaceMemberListItem = (membership: {
   name: membership.user.name,
   email: membership.user.email,
   roles: membership.roles,
+  designerAssignmentEnabled: membership.designerAssignmentEnabled,
+  designerAssignmentPausedUntil: membership.designerAssignmentPausedUntil,
+  listerAssignmentEnabled: membership.listerAssignmentEnabled,
+  listerAssignmentPausedUntil: membership.listerAssignmentPausedUntil,
   joinedAt: membership.createdAt,
 });
 
@@ -234,6 +248,10 @@ export const getWorkspaceMembers = async (
       id: true,
       userId: true,
       roles: true,
+      designerAssignmentEnabled: true,
+      designerAssignmentPausedUntil: true,
+      listerAssignmentEnabled: true,
+      listerAssignmentPausedUntil: true,
       createdAt: true,
       user: {
         select: {
@@ -291,6 +309,13 @@ export const updateWorkspaceMemberRoles = async (
       await assertNoActiveListerWork(tx, workspaceId, targetUserId);
     }
 
+    const designerRoleChanged =
+      targetMembership.roles.includes(WorkspaceRole.DESIGNER) !==
+      input.roles.includes(WorkspaceRole.DESIGNER);
+    const listerRoleChanged =
+      targetMembership.roles.includes(WorkspaceRole.LISTER) !==
+      input.roles.includes(WorkspaceRole.LISTER);
+
     const updatedMembership = await tx.workspaceMember.update({
       where: {
         workspaceId_userId: {
@@ -298,7 +323,78 @@ export const updateWorkspaceMemberRoles = async (
           userId: targetUserId,
         },
       },
-      data: { roles: input.roles },
+      data: {
+        roles: input.roles,
+        ...(designerRoleChanged
+          ? {
+              designerAssignmentEnabled: true,
+              designerAssignmentPausedUntil: null,
+            }
+          : {}),
+        ...(listerRoleChanged
+          ? {
+              listerAssignmentEnabled: true,
+              listerAssignmentPausedUntil: null,
+            }
+          : {}),
+      },
+      select: safeWorkspaceMemberListSelect,
+    });
+
+    return { member: toWorkspaceMemberListItem(updatedMembership) };
+  });
+};
+
+// Updates one role's automatic assignment availability without changing any role membership.
+export const updateWorkspaceMemberAssignmentAvailability = async (
+  workspaceId: string,
+  actorUserId: string,
+  targetUserId: string,
+  input: UpdateWorkspaceMemberAssignmentAvailabilityInput
+): Promise<UpdateWorkspaceMemberAssignmentAvailabilityResult> => {
+  return await prisma.$transaction(async (tx) => {
+    await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+    await assertCurrentActorIsAdmin(tx, workspaceId, actorUserId);
+
+    const targetMembership = await tx.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: targetUserId,
+        },
+      },
+      select: { roles: true },
+    });
+
+    if (!targetMembership) {
+      throw new ApiError(404, "Workspace member not found");
+    }
+
+    if (!targetMembership.roles.includes(input.role)) {
+      throw new ApiError(400, "Member does not have the selected workspace role");
+    }
+
+    const pausedUntil =
+      input.mode === "PAUSED" ? new Date(input.pausedUntil!) : null;
+    const availabilityUpdate =
+      input.role === WorkspaceRole.DESIGNER
+        ? {
+            designerAssignmentEnabled: input.mode !== "OFF",
+            designerAssignmentPausedUntil: pausedUntil,
+          }
+        : {
+            listerAssignmentEnabled: input.mode !== "OFF",
+            listerAssignmentPausedUntil: pausedUntil,
+          };
+
+    const updatedMembership = await tx.workspaceMember.update({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: targetUserId,
+        },
+      },
+      data: availabilityUpdate,
       select: safeWorkspaceMemberListSelect,
     });
 

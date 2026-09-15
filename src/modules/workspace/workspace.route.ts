@@ -8,6 +8,7 @@ import {
   deleteWorkspaceMember,
   getWorkspaceMembers,
   getUserWorkspaces,
+  updateWorkspaceMemberAssignmentAvailability,
   updateWorkspaceMemberRoles,
 } from "./workspace.controller.js";
 import {
@@ -62,6 +63,12 @@ router.patch(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(updateWorkspaceMemberRoles)
+);
+router.patch(
+  "/:workspaceId/members/:userId/assignment-availability",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(updateWorkspaceMemberAssignmentAvailability)
 );
 router.delete(
   "/:workspaceId/members/:userId",

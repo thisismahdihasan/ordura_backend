@@ -1,8 +1,9 @@
-import { Prisma, ResearchStatus } from "@prisma/client";
+import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "../research/research.helper.js";
 import { assignLeastWorkloadLister } from "./listing.assignment.js";
+import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
 import { getObjectStream } from "../storage/r2.js";
 import {
   AdminListingListItem,
@@ -331,6 +332,17 @@ export const backfillUnassignedListings = async (
 ): Promise<BackfillListingResult> => {
   return await prisma.$transaction(
     async (tx) => {
+      const listerCount = await tx.workspaceMember.count({
+        where: {
+          workspaceId,
+          ...getRoleAssignmentEligibilityFilter(WorkspaceRole.LISTER),
+        },
+      });
+
+      if (listerCount === 0) {
+        return { backfilledCount: 0, assignedItemIds: [] };
+      }
+
       // Find all items in READY_FOR_LISTING status having zero current assignments
       const unassignedItems = await tx.researchItem.findMany({
         where: {

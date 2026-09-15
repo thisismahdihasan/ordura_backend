@@ -2,6 +2,7 @@ import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
+import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
 import { BacklogSyncResult } from "./research.type.js";
 
 // Statuses that count as active work in a Designer's current queue.
@@ -31,17 +32,18 @@ class BacklogItemSkippedError extends Error {
   }
 }
 
-// Identifies the workspace Designer with the lowest active workload.
+// Identifies the workspace Designer with the lowest active workload who is currently eligible.
 // Tie-breaks deterministically: lowest load → earliest membership createdAt → ascending userId.
 // Accepts a TransactionClient so it can be called inside a transaction for fresh counts.
 export const findLeastWorkloadDesigner = async (
   tx: Prisma.TransactionClient,
-  workspaceId: string
+  workspaceId: string,
+  now: Date = new Date()
 ): Promise<string | null> => {
   const eligibleMembers = await tx.workspaceMember.findMany({
     where: {
       workspaceId,
-      roles: { has: WorkspaceRole.DESIGNER },
+      ...getRoleAssignmentEligibilityFilter(WorkspaceRole.DESIGNER, now),
     },
     select: {
       userId: true,
@@ -105,11 +107,12 @@ export const findLeastWorkloadDesigner = async (
 export const assignUnassignedResearchBacklog = async (
   workspaceId: string
 ): Promise<BacklogSyncResult> => {
+  const now = new Date();
   // Count eligible Designers for the early-exit path and the result summary.
   const designerCount = await prisma.workspaceMember.count({
     where: {
       workspaceId,
-      roles: { has: WorkspaceRole.DESIGNER },
+      ...getRoleAssignmentEligibilityFilter(WorkspaceRole.DESIGNER, now),
     },
   });
 

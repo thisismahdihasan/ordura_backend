@@ -32,3 +32,55 @@ export const updateWorkspaceMemberRolesSchema = z.object({
 export type UpdateWorkspaceMemberRolesInput = z.infer<
   typeof updateWorkspaceMemberRolesSchema
 >;
+
+export const assignmentAvailabilityRoleSchema = z.enum([
+  WorkspaceRole.DESIGNER,
+  WorkspaceRole.LISTER,
+]);
+
+export const assignmentAvailabilityModeSchema = z.enum([
+  "AVAILABLE",
+  "PAUSED",
+  "OFF",
+]);
+
+export const updateWorkspaceMemberAssignmentAvailabilitySchema = z
+  .object({
+    role: assignmentAvailabilityRoleSchema,
+    mode: assignmentAvailabilityModeSchema,
+    pausedUntil: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.mode === "PAUSED") {
+      if (!value.pausedUntil) {
+        context.addIssue({
+          code: "custom",
+          path: ["pausedUntil"],
+          message: "pausedUntil is required when mode is PAUSED",
+        });
+        return;
+      }
+
+      if (new Date(value.pausedUntil).getTime() <= Date.now()) {
+        context.addIssue({
+          code: "custom",
+          path: ["pausedUntil"],
+          message: "pausedUntil must be in the future",
+        });
+      }
+      return;
+    }
+
+    if (value.pausedUntil) {
+      context.addIssue({
+        code: "custom",
+        path: ["pausedUntil"],
+        message: "pausedUntil is only allowed when mode is PAUSED",
+      });
+    }
+  });
+
+export type UpdateWorkspaceMemberAssignmentAvailabilityInput = z.infer<
+  typeof updateWorkspaceMemberAssignmentAvailabilitySchema
+>;

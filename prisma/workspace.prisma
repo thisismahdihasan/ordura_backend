@@ -13,11 +13,15 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  id          String          @id @default(cuid())
-  workspaceId String
-  userId      String
-  roles       WorkspaceRole[]
-  createdAt   DateTime        @default(now())
+  id                            String          @id @default(cuid())
+  workspaceId                   String
+  userId                        String
+  roles                         WorkspaceRole[]
+  designerAssignmentEnabled     Boolean         @default(true)
+  designerAssignmentPausedUntil DateTime?
+  listerAssignmentEnabled       Boolean         @default(true)
+  listerAssignmentPausedUntil   DateTime?
+  createdAt                     DateTime        @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)

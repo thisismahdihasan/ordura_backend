@@ -4,6 +4,7 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as workspaceService from "./workspace.service.js";
 import {
   createWorkspaceSchema,
+  updateWorkspaceMemberAssignmentAvailabilitySchema,
   updateWorkspaceMemberRolesSchema,
   workspaceIdParamsSchema,
   workspaceMemberParamsSchema,
@@ -77,6 +78,29 @@ export const updateWorkspaceMemberRoles = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Workspace member roles updated successfully",
+    data: result,
+  });
+};
+
+// Updates a member's automatic Designer or Lister assignment availability.
+export const updateWorkspaceMemberAssignmentAvailability = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { workspaceId, userId } = workspaceMemberParamsSchema.parse(req.params);
+  const validatedInput =
+    updateWorkspaceMemberAssignmentAvailabilitySchema.parse(req.body);
+  const result = await workspaceService.updateWorkspaceMemberAssignmentAvailability(
+    workspaceId,
+    authReq.user.id,
+    userId,
+    validatedInput
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace member assignment availability updated successfully",
     data: result,
   });
 };

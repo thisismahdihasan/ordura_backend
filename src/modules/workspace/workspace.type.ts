@@ -41,6 +41,10 @@ export type WorkspaceMemberListItem = {
   name: string | null;
   email: string;
   roles: WorkspaceRole[];
+  designerAssignmentEnabled: boolean;
+  designerAssignmentPausedUntil: Date | null;
+  listerAssignmentEnabled: boolean;
+  listerAssignmentPausedUntil: Date | null;
   joinedAt: Date;
 };
 
@@ -49,6 +53,10 @@ export type GetWorkspaceMembersResult = {
 };
 
 export type UpdateWorkspaceMemberRolesResult = {
+  member: WorkspaceMemberListItem;
+};
+
+export type UpdateWorkspaceMemberAssignmentAvailabilityResult = {
   member: WorkspaceMemberListItem;
 };
 

@@ -33,13 +33,17 @@ const pendingInviteData = {
 
 const workspaceMemberData = {
   type: "object",
-  required: ["membershipId", "userId", "name", "email", "roles", "joinedAt"],
+  required: ["membershipId", "userId", "name", "email", "roles", "designerAssignmentEnabled", "designerAssignmentPausedUntil", "listerAssignmentEnabled", "listerAssignmentPausedUntil", "joinedAt"],
   properties: {
     membershipId: { type: "string" },
     userId: { type: "string" },
     name: { type: "string", nullable: true },
     email: { type: "string", format: "email" },
     roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } },
+    designerAssignmentEnabled: { type: "boolean" },
+    designerAssignmentPausedUntil: { type: "string", format: "date-time", nullable: true },
+    listerAssignmentEnabled: { type: "boolean" },
+    listerAssignmentPausedUntil: { type: "string", format: "date-time", nullable: true },
     joinedAt: { type: "string", format: "date-time" },
   },
 };
@@ -54,6 +58,21 @@ const workspaceMemberRolesBody = {
       minItems: 1,
       uniqueItems: true,
       items: { $ref: "#/components/schemas/WorkspaceRole" },
+    },
+  },
+};
+
+const workspaceMemberAssignmentAvailabilityBody = {
+  type: "object",
+  additionalProperties: false,
+  required: ["role", "mode"],
+  properties: {
+    role: { type: "string", enum: ["DESIGNER", "LISTER"] },
+    mode: { type: "string", enum: ["AVAILABLE", "PAUSED", "OFF"] },
+    pausedUntil: {
+      type: "string",
+      format: "date-time",
+      description: "Required and strictly in the future when mode is PAUSED; omitted for AVAILABLE and OFF.",
     },
   },
 };
@@ -186,6 +205,26 @@ export const workspacePaths: OpenApiPathMap = {
         "403": jsonError("Explicit ADMIN role is required."),
         "404": jsonError("Workspace member not found"),
         "409": jsonError("Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/members/{userId}/assignment-availability": {
+    patch: {
+      tags: ["Workspaces"],
+      summary: "Set a member's automatic assignment availability",
+      description: "ADMIN only. Applies to the member's existing DESIGNER or LISTER role. AVAILABLE enables automatic assignment, PAUSED enables it after the future pausedUntil time, and OFF disables it. Manual designer reassignment remains role-based and is unaffected.",
+      security: [{ cookieAuth: [] }],
+      parameters: [
+        { $ref: "#/components/parameters/WorkspaceId" },
+        { name: "userId", in: "path", required: true, schema: { type: "string", minLength: 1 } },
+      ],
+      requestBody: { required: true, content: { "application/json": { schema: workspaceMemberAssignmentAvailabilityBody } } },
+      responses: {
+        "200": jsonSuccess("Workspace member assignment availability updated successfully", { type: "object", required: ["member"], properties: { member: workspaceMemberData } }),
+        "400": jsonError("Invalid member parameters, assignment availability body, or selected role."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Explicit ADMIN role is required."),
+        "404": jsonError("Workspace member not found."),
       },
     },
   },

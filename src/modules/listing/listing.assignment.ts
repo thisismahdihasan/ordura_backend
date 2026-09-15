@@ -5,6 +5,7 @@ import {
   NOTIFICATION_TYPE_LISTING_ASSIGNED,
 } from "./listing.type.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
+import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
 
 export const ACTIVE_LISTING_WORKLOAD_STATUSES: ResearchStatus[] = [
   ResearchStatus.READY_FOR_LISTING,
@@ -27,12 +28,13 @@ export const acquireWorkspaceListerLock = async (
 // Identifies the workspace lister with lowest active workload, using join date and userId as deterministic tie-breakers.
 export const findLeastWorkloadLister = async (
   tx: Prisma.TransactionClient,
-  workspaceId: string
+  workspaceId: string,
+  now: Date = new Date()
 ): Promise<string | null> => {
   const eligibleMembers = await tx.workspaceMember.findMany({
     where: {
       workspaceId,
-      roles: { has: WorkspaceRole.LISTER },
+      ...getRoleAssignmentEligibilityFilter(WorkspaceRole.LISTER, now),
     },
     select: {
       userId: true,
