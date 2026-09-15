@@ -389,10 +389,10 @@ export const researchPaths: OpenApiPathMap = {
     },
     delete: {
       tags: ["Research"],
-      summary: "Delete an early-stage research item",
+      summary: "Permanently delete a research item (Admin only)",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit ADMIN role required. Allowed only for items in RESEARCHED or ASSIGNED status that have no substantive downstream production history (reviews, issues, final assets, or started designer work). Initial auto-assignments and notifications are cleaned atomically.",
+        "Explicit ADMIN role required. Permanently and irreversibly deletes the research item in any lifecycle status. All child records (assignments, reviews, issues, final assets, listings) are cascade-deleted atomically. External storage assets (Cloudinary reference image, review screenshots, R2 final assets) are cleaned up best-effort after commit. Deleting an item in LISTED status removes internal workflow records only and does NOT delete or modify the live Etsy listing.",
       parameters: workspaceAndResearchParameters,
       responses: {
         "200": jsonSuccess("Research item deleted successfully.", {
@@ -405,9 +405,6 @@ export const researchPaths: OpenApiPathMap = {
         "401": jsonError("Authentication is required."),
         "403": jsonError("ADMIN role is required."),
         "404": jsonError("Research item was not found."),
-        "409": jsonError(
-          "Cannot delete research item that has progressed into production workflow."
-        ),
       },
     },
   },

@@ -32,6 +32,7 @@ import {
   ReferenceImageUploader,
   ReferenceImageDestroyer,
 } from "./research.storage.js";
+import { deleteObject } from "../storage/r2.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
@@ -1243,110 +1244,169 @@ export const updateResearchItem = async (
 
 export type DeleteResearchItemOptions = {
   destroyer?: ReferenceImageDestroyer;
+  r2Deleter?: (storageKey: string) => Promise<void>;
 };
 
-// Production-safe deletion of early-stage research items with no substantive downstream workflow.
+// Permanently deletes a research item in any lifecycle status. ADMIN only.
+// All internal child records are cascade-deleted by PostgreSQL. External storage
+// assets (Cloudinary reference image, Cloudinary review screenshots, R2 final
+// assets) are cleaned up best-effort after the DB transaction commits.
 export const deleteResearchItem = async (
   workspaceId: string,
   researchItemId: string,
   options?: DeleteResearchItemOptions
 ): Promise<DeleteResearchItemResult> => {
-  const item = await prisma.researchItem.findUnique({
-    where: {
-      id: researchItemId,
-      workspaceId,
-    },
-    select: {
-      id: true,
-      status: true,
-      referenceImagePublicId: true,
-      designAssignments: {
-        select: {
-          id: true,
-          startedAt: true,
-          completedAt: true,
+  // 1. Atomic DB transaction: row lock -> pre-fetch cleanup metadata -> notification cleanup -> cascade delete parent
+  const cleanupMetadata = await prisma.$transaction(async (tx) => {
+    // Explicit row-level lock on ResearchItem to serialize with any concurrent child creations (review/final-asset)
+    await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
+
+    const item = await tx.researchItem.findUnique({
+      where: {
+        id: researchItemId,
+        workspaceId,
+      },
+      select: {
+        id: true,
+        referenceImagePublicId: true,
+        reviewSubmissions: {
+          where: { imageDeletedAt: null },
+          select: { imagePublicId: true },
+        },
+        finalAssets: {
+          select: { storageKey: true },
         },
       },
-      reviewSubmissions: {
-        select: { id: true },
-        take: 1,
-      },
-      issueReports: {
-        select: { id: true },
-        take: 1,
-      },
-      finalAssets: {
-        select: { id: true },
-        take: 1,
-      },
-      listingAssignments: {
-        select: { id: true },
-        take: 1,
-      },
-      listingResult: {
-        select: { id: true },
-      },
-    },
-  });
+    });
 
-  if (!item) {
-    throw new ApiError(404, "Research item not found");
-  }
+    if (!item) {
+      throw new ApiError(404, "Research item not found");
+    }
 
-  const ALLOWED_DELETE_STATUSES: ResearchStatus[] = [
-    ResearchStatus.RESEARCHED,
-    ResearchStatus.ASSIGNED,
-  ];
-
-  if (!ALLOWED_DELETE_STATUSES.includes(item.status)) {
-    throw new ApiError(
-      409,
-      `Cannot delete research item in '${item.status}' status. Only items in RESEARCHED or ASSIGNED status may be deleted.`
-    );
-  }
-
-  const hasStartedAssignment = item.designAssignments.some(
-    (a) => a.startedAt !== null || a.completedAt !== null
-  );
-  const hasSubstantiveRecords =
-    hasStartedAssignment ||
-    item.reviewSubmissions.length > 0 ||
-    item.issueReports.length > 0 ||
-    item.finalAssets.length > 0 ||
-    item.listingAssignments.length > 0 ||
-    item.listingResult !== null;
-
-  if (hasSubstantiveRecords) {
-    throw new ApiError(
-      409,
-      "Cannot delete research item with active or completed production workflow history"
-    );
-  }
-
-  await prisma.$transaction(async (tx) => {
+    // Notifications use onDelete: SetNull — delete explicitly to avoid dead alerts
     await tx.notification.deleteMany({
       where: { researchItemId },
     });
 
-    await tx.designAssignment.deleteMany({
-      where: { researchItemId },
-    });
-
+    // CASCADE handles: DesignAssignment, IssueReport, ReviewSubmission,
+    // ReviewAnnotation, AnnotationReply, FinalAsset, ListingAssignment, ListingResult
     await tx.researchItem.delete({
       where: {
         id: researchItemId,
         workspaceId,
       },
     });
+
+    // Deduplicate review submission image public IDs
+    const reviewImagePublicIds = Array.from(
+      new Set(item.reviewSubmissions.map((rs) => rs.imagePublicId))
+    );
+    const finalAssetStorageKeys = item.finalAssets.map((fa) => fa.storageKey);
+
+    return {
+      researchItemId: item.id,
+      referenceImagePublicId: item.referenceImagePublicId,
+      reviewImagePublicIds,
+      finalAssetStorageKeys,
+    };
   });
 
-  if (item.referenceImagePublicId) {
-    const destroyer =
-      options?.destroyer ?? destroyReferenceImageFromCloudinary;
-    await destroyer(item.referenceImagePublicId);
-  }
+  // 2. Post-commit external storage cleanup (best-effort, fully awaited)
+  await cleanupExternalAssets({
+    researchItemId: cleanupMetadata.researchItemId,
+    referenceImagePublicId: cleanupMetadata.referenceImagePublicId,
+    reviewImagePublicIds: cleanupMetadata.reviewImagePublicIds,
+    finalAssetStorageKeys: cleanupMetadata.finalAssetStorageKeys,
+    destroyer: options?.destroyer,
+    r2Deleter: options?.r2Deleter,
+  });
 
   return {
-    researchItemId: item.id,
+    researchItemId: cleanupMetadata.researchItemId,
   };
+};
+
+// --- External storage cleanup helpers (post-commit, best-effort) ---
+
+type ExternalAssetCleanupInput = {
+  researchItemId: string;
+  referenceImagePublicId: string | null;
+  reviewImagePublicIds: string[];
+  finalAssetStorageKeys: string[];
+  destroyer?: ReferenceImageDestroyer;
+  r2Deleter?: (storageKey: string) => Promise<void>;
+};
+
+// Awaits best-effort external storage cleanup post-commit.
+// Each provider operation is isolated so a single failure does not prevent
+// remaining assets from being cleaned, and errors never fail the primary API response.
+const cleanupExternalAssets = async (
+  input: ExternalAssetCleanupInput
+): Promise<void> => {
+  const {
+    researchItemId,
+    referenceImagePublicId,
+    reviewImagePublicIds,
+    finalAssetStorageKeys,
+    destroyer,
+    r2Deleter,
+  } = input;
+
+  const destroy = destroyer ?? destroyReferenceImageFromCloudinary;
+  const removeR2Object = r2Deleter ?? deleteObject;
+
+  const cleanupTasks: Promise<void>[] = [];
+
+  // Cloudinary: reference image
+  if (referenceImagePublicId) {
+    cleanupTasks.push(
+      destroy(referenceImagePublicId).catch((error: unknown) => {
+        console.warn(
+          "[STORAGE_CLEANUP_WARNING] Failed to delete reference image from Cloudinary",
+          {
+            researchItemId,
+            provider: "cloudinary",
+            publicId: referenceImagePublicId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      })
+    );
+  }
+
+  // Cloudinary: review submission screenshots
+  for (const publicId of reviewImagePublicIds) {
+    cleanupTasks.push(
+      destroy(publicId).catch((error: unknown) => {
+        console.warn(
+          "[STORAGE_CLEANUP_WARNING] Failed to delete review screenshot from Cloudinary",
+          {
+            researchItemId,
+            provider: "cloudinary",
+            publicId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      })
+    );
+  }
+
+  // R2: final asset files
+  for (const storageKey of finalAssetStorageKeys) {
+    cleanupTasks.push(
+      removeR2Object(storageKey).catch((error: unknown) => {
+        console.warn(
+          "[STORAGE_CLEANUP_WARNING] Failed to delete final asset from R2",
+          {
+            researchItemId,
+            provider: "r2",
+            storageKey,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      })
+    );
+  }
+
+  await Promise.allSettled(cleanupTasks);
 };
