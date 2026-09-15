@@ -10,6 +10,7 @@ import {
   getUserWorkspaces,
   updateWorkspaceMemberAssignmentAvailability,
   updateWorkspaceMemberRoles,
+  updateWorkspaceSettings,
 } from "./workspace.controller.js";
 import {
   createWorkspaceInvite,
@@ -28,6 +29,12 @@ const router: Router = Router();
 
 router.get("/", requireAuth, catchAsync(getUserWorkspaces));
 router.post("/", requireAuth, catchAsync(createWorkspace));
+router.patch(
+  "/:workspaceId/settings",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(updateWorkspaceSettings)
+);
 router.post(
   "/:workspaceId/invites",
   requireAuth,
@@ -88,4 +95,3 @@ router.use("/:workspaceId/admin", DashboardRoutes);
 
 export const WorkspaceRoutes = router;
 export default router;
-

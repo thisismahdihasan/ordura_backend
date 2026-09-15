@@ -166,14 +166,21 @@ export const openApiComponents = {
     },
     WorkspaceSummary: {
       type: "object",
-      required: ["id", "name"],
-      properties: { id: stringId, name: { type: "string" } },
+      required: ["id", "name", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled"],
+      properties: { 
+        id: stringId, 
+        name: { type: "string" },
+        designerAutoAssignmentEnabled: { type: "boolean" },
+        listerAutoAssignmentEnabled: { type: "boolean" },
+      },
     },
     Workspace: {
       type: "object",
-      required: ["id", "name", "ownerId", "createdAt", "updatedAt"],
+      required: ["id", "name", "ownerId", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled", "createdAt", "updatedAt"],
       properties: {
         id: stringId, name: { type: "string" }, ownerId: stringId,
+        designerAutoAssignmentEnabled: { type: "boolean" },
+        listerAutoAssignmentEnabled: { type: "boolean" },
         createdAt: dateTime, updatedAt: dateTime,
       },
     },

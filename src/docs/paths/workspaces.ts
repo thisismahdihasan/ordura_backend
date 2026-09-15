@@ -248,4 +248,24 @@ export const workspacePaths: OpenApiPathMap = {
       },
     },
   },
+  "/api/v1/workspaces/{workspaceId}/settings": {
+    patch: {
+      tags: ["Workspaces"], summary: "Update workspace settings",
+      description: "ADMIN only. Updates workspace-level settings like auto-assignment toggles.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      requestBody: { required: true, content: { "application/json": { schema: {
+        type: "object", additionalProperties: false, properties: {
+          designerAutoAssignmentEnabled: { type: "boolean" },
+          listerAutoAssignmentEnabled: { type: "boolean" },
+        }
+      } } } },
+      responses: {
+        "200": jsonSuccess("Workspace settings updated successfully", { type: "object", required: ["workspace"], properties: { workspace: { $ref: "#/components/schemas/WorkspaceSummary" } } }),
+        "400": jsonError("Invalid settings body."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Explicit ADMIN role is required."),
+      },
+    },
+  },
 };

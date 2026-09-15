@@ -4,6 +4,8 @@ export type SafeWorkspace = {
   id: string;
   name: string;
   ownerId: string;
+  designerAutoAssignmentEnabled: boolean;
+  listerAutoAssignmentEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

@@ -41,6 +41,7 @@ import {
   uploadObject,
   UploadObjectInput,
 } from "../storage/r2.js";
+import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 
 type FinalAssetStorageOperations = {
   upload: (input: UploadObjectInput) => Promise<void>;
@@ -1336,7 +1337,15 @@ export const completeDesignWork = async (
       }
 
       // 9. Auto-assign least-workload lister if eligible lister exists in workspace
-      await assignLeastWorkloadLister(tx, workspaceId, researchItemId);
+      await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { listerAutoAssignmentEnabled: true },
+      });
+
+      if (workspace?.listerAutoAssignmentEnabled) {
+        await assignLeastWorkloadLister(tx, workspaceId, researchItemId);
+      }
 
       return {
         researchItem: {

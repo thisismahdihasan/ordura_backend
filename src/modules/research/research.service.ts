@@ -162,10 +162,16 @@ export const createResearchItem = async (
     const createdItem = await prisma.$transaction(async (tx) => {
       await acquireWorkspaceMemberMutationLock(tx, workspaceId);
 
-      const chosenDesignerId = await findLeastWorkloadDesigner(
-        tx,
-        workspaceId
-      );
+      // Check workspace-level auto assignment toggle
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { designerAutoAssignmentEnabled: true },
+      });
+
+      let chosenDesignerId: string | null = null;
+      if (workspace?.designerAutoAssignmentEnabled) {
+        chosenDesignerId = await findLeastWorkloadDesigner(tx, workspaceId);
+      }
 
       const initialStatus = chosenDesignerId
         ? ResearchStatus.ASSIGNED

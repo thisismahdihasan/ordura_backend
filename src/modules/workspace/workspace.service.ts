@@ -22,6 +22,8 @@ const safeWorkspaceSelect = {
   id: true,
   name: true,
   ownerId: true,
+  designerAutoAssignmentEnabled: true,
+  listerAutoAssignmentEnabled: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -456,5 +458,37 @@ export const deleteWorkspaceMember = async (
     });
 
     return { userId: targetUserId };
+  });
+};
+
+import { UpdateWorkspaceSettingsInput } from "./workspace.validation.js";
+import { SafeWorkspace } from "./workspace.type.js";
+
+// Updates workspace-level assignment settings.
+export const updateWorkspaceSettings = async (
+  workspaceId: string,
+  actorUserId: string,
+  input: UpdateWorkspaceSettingsInput
+): Promise<SafeWorkspace> => {
+  return await prisma.$transaction(async (tx) => {
+    // Acquire the same advisory lock used for auto assignment routing
+    await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+    
+    await assertCurrentActorIsAdmin(tx, workspaceId, actorUserId);
+
+    const updatedWorkspace = await tx.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        ...(input.designerAutoAssignmentEnabled !== undefined
+          ? { designerAutoAssignmentEnabled: input.designerAutoAssignmentEnabled }
+          : {}),
+        ...(input.listerAutoAssignmentEnabled !== undefined
+          ? { listerAutoAssignmentEnabled: input.listerAutoAssignmentEnabled }
+          : {}),
+      },
+      select: safeWorkspaceSelect,
+    });
+
+    return updatedWorkspace;
   });
 };

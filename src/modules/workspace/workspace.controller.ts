@@ -125,3 +125,26 @@ export const deleteWorkspaceMember = async (
   });
 };
 
+import { updateWorkspaceSettingsSchema } from "./workspace.validation.js";
+
+// Updates workspace-level auto assignment settings.
+export const updateWorkspaceSettings = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { workspaceId } = workspaceIdParamsSchema.parse(req.params);
+  const validatedInput = updateWorkspaceSettingsSchema.parse(req.body);
+
+  const result = await workspaceService.updateWorkspaceSettings(
+    workspaceId,
+    authReq.user.id,
+    validatedInput
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace settings updated successfully",
+    data: { workspace: result },
+  });
+};

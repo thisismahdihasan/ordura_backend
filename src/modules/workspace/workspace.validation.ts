@@ -84,3 +84,20 @@ export const updateWorkspaceMemberAssignmentAvailabilitySchema = z
 export type UpdateWorkspaceMemberAssignmentAvailabilityInput = z.infer<
   typeof updateWorkspaceMemberAssignmentAvailabilitySchema
 >;
+
+export const updateWorkspaceSettingsSchema = z
+  .object({
+    designerAutoAssignmentEnabled: z.boolean().optional(),
+    listerAutoAssignmentEnabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.designerAutoAssignmentEnabled !== undefined ||
+      data.listerAutoAssignmentEnabled !== undefined,
+    "At least one setting must be provided"
+  );
+
+export type UpdateWorkspaceSettingsInput = z.infer<
+  typeof updateWorkspaceSettingsSchema
+>;
