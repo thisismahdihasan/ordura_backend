@@ -5,6 +5,8 @@ import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   backfillListingAssignments,
+  assignLister,
+  bulkAssignListers,
   completeListing,
   downloadFinalAsset,
   getAdminListingList,
@@ -29,6 +31,20 @@ listingRouter.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(getAdminListingList)
+);
+
+listingRouter.patch(
+  "/:researchItemId/lister",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(assignLister)
+);
+
+listingRouter.post(
+  "/bulk-assign",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(bulkAssignListers)
 );
 
 listingRouter.get(

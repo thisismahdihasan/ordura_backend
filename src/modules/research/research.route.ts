@@ -5,6 +5,7 @@ import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   createResearchItem,
+  bulkAssignResearchDesigners,
   deleteResearchItem,
   getIssueItems,
   getResearchItemById,
@@ -58,6 +59,13 @@ router.patch(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(reassignResearchDesigner)
+);
+
+router.post(
+  "/bulk-assign",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(bulkAssignResearchDesigners)
 );
 
 // Sync unassigned RESEARCHED backlog to eligible Designers (ADMIN only, idempotent).

@@ -54,6 +54,7 @@ export const getResearchItemsQuerySchema = z.object({
     .trim()
     .transform((val) => (val.length > 0 ? val : undefined))
     .optional(),
+  assignment: z.enum(["UNASSIGNED"]).optional(),
   page: z.coerce
     .number()
     .int("page must be an integer")
@@ -114,6 +115,47 @@ export const reassignDesignerBodySchema = z
 
 export type ReassignDesignerBodyInput = z.infer<
   typeof reassignDesignerBodySchema
+>;
+
+const bulkResearchItemIdsSchema = z
+  .array(
+    z
+      .string({ message: "research item ID is required" })
+      .trim()
+      .min(1, "research item ID is required")
+  )
+  .min(1, "At least one research item ID is required")
+  .max(100, "Cannot assign more than 100 research items at once")
+  .superRefine((researchItemIds, ctx) => {
+    if (new Set(researchItemIds).size !== researchItemIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "researchItemIds must not contain duplicates",
+      });
+    }
+  });
+
+export const bulkAssignResearchBodySchema = z.discriminatedUnion("mode", [
+  z
+    .object({
+      researchItemIds: bulkResearchItemIdsSchema,
+      mode: z.literal("TARGET"),
+      designerId: z
+        .string({ message: "designerId is required" })
+        .trim()
+        .min(1, "designerId is required"),
+    })
+    .strict(),
+  z
+    .object({
+      researchItemIds: bulkResearchItemIdsSchema,
+      mode: z.literal("DISTRIBUTE"),
+    })
+    .strict(),
+]);
+
+export type BulkAssignResearchBodyInput = z.infer<
+  typeof bulkAssignResearchBodySchema
 >;
 
 export const previewResearchItemSchema = createResearchItemSchema;

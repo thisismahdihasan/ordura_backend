@@ -300,11 +300,12 @@ export const researchPaths: OpenApiPathMap = {
     },
     get: {
       tags: ["Research"], summary: "List workspace research items", security: [{ cookieAuth: [] }],
-      description: "ADMIN users may read the workspace-wide list and use the optional createdBy filter. RESEARCHER users receive only items they created; their createdBy query value is ignored. DESIGNER and LISTER users use assignment-owned workflow endpoints instead.",
+      description: "ADMIN users may read the workspace-wide list and use the optional createdBy filter. RESEARCHER users receive only items they created; their createdBy query value is ignored. assignment=UNASSIGNED returns only RESEARCHED items with no current DesignAssignment. DESIGNER and LISTER users use assignment-owned workflow endpoints instead.",
       parameters: [
         { $ref: "#/components/parameters/WorkspaceId" },
         { name: "createdBy", in: "query", schema: { type: "string", minLength: 1 } },
         { name: "status", in: "query", schema: { $ref: "#/components/schemas/ResearchStatus" } },
+        { name: "assignment", in: "query", schema: { type: "string", enum: ["UNASSIGNED"] }, description: "Virtual filter that enforces RESEARCHED status and no current DesignAssignment." },
         { name: "date", in: "query", schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "UTC calendar date, YYYY-MM-DD." } },
         { name: "search", in: "query", schema: { type: "string" } },
         { $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/Limit" },
@@ -464,6 +465,20 @@ export const researchPaths: OpenApiPathMap = {
       description: "ADMIN only. Allowed from RESEARCHED, ASSIGNED, DESIGN_IN_PROGRESS, DESIGN_REVIEW, CORRECTION_NEEDED, or ISSUE_REPORTED.",
       parameters: workspaceAndResearchParameters, requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["designerId"], properties: { designerId: { type: "string", minLength: 1 } } } } } },
       responses: { "200": jsonSuccess("Designer reassigned successfully.", { type: "object", required: ["researchItem", "assignment"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/ResearchStatus" } } }, assignment: { $ref: "#/components/schemas/AssignmentSummary" } } }), "400": jsonError("Target user is not a workspace designer."), "401": jsonError("Authentication is required."), "403": jsonError("ADMIN role is required."), "404": jsonError("Research item was not found."), "409": jsonError("The item cannot be reassigned in its current state.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/research-items/bulk-assign": {
+    post: {
+      tags: ["Research"],
+      summary: "Bulk assign unassigned research items",
+      security: [{ cookieAuth: [] }],
+      description: "ADMIN only. Atomic: every item must belong to the workspace, be RESEARCHED, and have no current DesignAssignment or none are assigned. TARGET assigns a role-valid Designer regardless of availability. DISTRIBUTE uses eligible Designers with least workload, then membership join date and user ID. Maximum 100 items.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      requestBody: { required: true, content: { "application/json": { schema: { oneOf: [
+        { type: "object", additionalProperties: false, required: ["researchItemIds", "mode", "designerId"], properties: { researchItemIds: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: { type: "string", minLength: 1 } }, mode: { type: "string", enum: ["TARGET"] }, designerId: { type: "string", minLength: 1 } } },
+        { type: "object", additionalProperties: false, required: ["researchItemIds", "mode"], properties: { researchItemIds: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: { type: "string", minLength: 1 } }, mode: { type: "string", enum: ["DISTRIBUTE"] } } },
+      ] } } } },
+      responses: { "200": jsonSuccess("Research items assigned successfully.", { type: "object", required: ["assignedCount", "assignedItemIds"], properties: { assignedCount: { type: "integer" }, assignedItemIds: { type: "array", items: { type: "string" } } } }), "400": jsonError("Invalid assignment request or target Designer."), "401": jsonError("Authentication is required."), "403": jsonError("ADMIN role is required."), "404": jsonError("One or more research items were not found."), "409": jsonError("Items are stale, assigned, not RESEARCHED, or no eligible Designers are available.") },
     },
   },
   "/api/v1/workspaces/{workspaceId}/research-items/sync-assignments": {

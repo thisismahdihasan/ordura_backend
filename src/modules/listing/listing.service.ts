@@ -2,7 +2,12 @@ import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "../research/research.helper.js";
-import { assignLeastWorkloadLister } from "./listing.assignment.js";
+import {
+  ACTIVE_LISTING_WORKLOAD_STATUSES,
+  acquireWorkspaceListerLock,
+  assignLeastWorkloadLister,
+} from "./listing.assignment.js";
+import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
 import { getObjectStream } from "../storage/r2.js";
 import {
@@ -15,9 +20,11 @@ import {
   ListerWorkQueueItem,
   ListerWorkQueueResult,
   StartListingResult,
+  NOTIFICATION_TYPE_LISTING_ASSIGNED,
 } from "./listing.type.js";
 import {
   ADMIN_LISTING_WORKFLOW_STATUSES,
+  BulkAssignListingBodyInput,
   CompleteListingBodyInput,
   GetAdminListingListQueryInput,
   GetListerWorkQueueQueryInput,
@@ -715,11 +722,288 @@ export const completeListingWork = async (
   );
 };
 
+// Atomically assigns an unassigned READY_FOR_LISTING item to an explicit Lister.
+// Explicit ADMIN targets are role-validated only and intentionally bypass automatic availability settings.
+export const assignLister = async (
+  workspaceId: string,
+  researchItemId: string,
+  listerId: string
+) => {
+  return await prisma.$transaction(
+    async (tx) => {
+      // Lock and validate item state before taking workspace advisory locks.
+      const lockedItem = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.READY_FOR_LISTING,
+          listingAssignments: { none: { isCurrent: true } },
+        },
+        data: { updatedAt: new Date() },
+      });
+
+      if (lockedItem.count !== 1) {
+        const workspaceItem = await tx.researchItem.count({
+          where: { id: researchItemId, workspaceId },
+        });
+
+        if (workspaceItem === 0) {
+          throw new ApiError(404, "Research item not found");
+        }
+
+        throw new ApiError(
+          409,
+          "Research item must be unassigned and READY_FOR_LISTING"
+        );
+      }
+
+      await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+      await acquireWorkspaceListerLock(tx, workspaceId);
+
+      const targetMember = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId: listerId,
+          },
+        },
+        select: { roles: true },
+      });
+
+      if (!targetMember?.roles.includes(WorkspaceRole.LISTER)) {
+        throw new ApiError(400, "Selected user is not a lister in this workspace");
+      }
+
+      const revalidatedItem = await tx.researchItem.updateMany({
+        where: {
+          id: researchItemId,
+          workspaceId,
+          status: ResearchStatus.READY_FOR_LISTING,
+          listingAssignments: { none: { isCurrent: true } },
+        },
+        data: { updatedAt: new Date() },
+      });
+
+      if (revalidatedItem.count !== 1) {
+        throw new ApiError(
+          409,
+          "Research item must be unassigned and READY_FOR_LISTING"
+        );
+      }
+
+      const assignment = await tx.listingAssignment.create({
+        data: {
+          researchItemId,
+          listerId,
+          isCurrent: true,
+        },
+        select: {
+          id: true,
+          listerId: true,
+          assignedAt: true,
+          isCurrent: true,
+        },
+      });
+      await tx.notification.create({
+        data: {
+          workspaceId,
+          userId: listerId,
+          type: NOTIFICATION_TYPE_LISTING_ASSIGNED,
+          title: "New Design Ready for Listing",
+          message: "You have been assigned to list a new design.",
+          researchItemId,
+        },
+      });
+
+      return {
+        researchItem: {
+          id: researchItemId,
+          status: ResearchStatus.READY_FOR_LISTING,
+        },
+        assignment,
+      };
+    },
+    { maxWait: 10000, timeout: 15000 }
+  );
+};
+
+// Atomically assigns selected unassigned listing items to an explicit Lister or
+// distributes them among eligible Listers with deterministic balancing.
+export const bulkAssignListers = async (
+  workspaceId: string,
+  input: BulkAssignListingBodyInput
+) => {
+  return await prisma.$transaction(
+    async (tx) => {
+      const workspaceItemCount = await tx.researchItem.count({
+        where: {
+          workspaceId,
+          id: { in: input.researchItemIds },
+        },
+      });
+
+      if (workspaceItemCount !== input.researchItemIds.length) {
+        throw new ApiError(404, "One or more research items were not found");
+      }
+
+      const lockedResearchItemIds = [...input.researchItemIds].sort((a, b) =>
+        a.localeCompare(b)
+      );
+
+      // Lock and validate items in a stable order before advisory locks.
+      for (const researchItemId of lockedResearchItemIds) {
+        const locked = await tx.researchItem.updateMany({
+          where: {
+            id: researchItemId,
+            workspaceId,
+            status: ResearchStatus.READY_FOR_LISTING,
+            listingAssignments: { none: { isCurrent: true } },
+          },
+          data: { updatedAt: new Date() },
+        });
+
+        if (locked.count !== 1) {
+          throw new ApiError(
+            409,
+            "All research items must be unassigned and READY_FOR_LISTING"
+          );
+        }
+      }
+
+      await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+      await acquireWorkspaceListerLock(tx, workspaceId);
+
+      let listerIds: string[];
+
+      if (input.mode === "TARGET") {
+        const targetMember = await tx.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId,
+              userId: input.listerId,
+            },
+          },
+          select: { roles: true },
+        });
+
+        if (!targetMember?.roles.includes(WorkspaceRole.LISTER)) {
+          throw new ApiError(400, "Selected user is not a lister in this workspace");
+        }
+
+        listerIds = input.researchItemIds.map(() => input.listerId);
+      } else {
+        const eligibleMembers = await tx.workspaceMember.findMany({
+          where: {
+            workspaceId,
+            ...getRoleAssignmentEligibilityFilter(WorkspaceRole.LISTER),
+          },
+          select: {
+            userId: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: "asc" }, { userId: "asc" }],
+        });
+
+        if (eligibleMembers.length === 0) {
+          throw new ApiError(409, "No eligible listers are available");
+        }
+
+        const workloadRows = await tx.listingAssignment.groupBy({
+          by: ["listerId"],
+          where: {
+            listerId: { in: eligibleMembers.map((member) => member.userId) },
+            isCurrent: true,
+            researchItem: {
+              workspaceId,
+              status: { in: ACTIVE_LISTING_WORKLOAD_STATUSES },
+            },
+          },
+          _count: { _all: true },
+        });
+        const workloadByListerId = new Map(
+          workloadRows.map((row) => [row.listerId, row._count._all])
+        );
+        const candidates = eligibleMembers.map((member) => ({
+          ...member,
+          activeWorkload: workloadByListerId.get(member.userId) ?? 0,
+        }));
+        const [firstCandidate] = candidates;
+
+        if (!firstCandidate) {
+          throw new ApiError(409, "No eligible listers are available");
+        }
+
+        listerIds = input.researchItemIds.map(() => {
+          let chosenCandidate = firstCandidate;
+          for (const candidate of candidates) {
+            if (
+              candidate.activeWorkload < chosenCandidate.activeWorkload ||
+              (candidate.activeWorkload === chosenCandidate.activeWorkload &&
+                (candidate.createdAt < chosenCandidate.createdAt ||
+                  (candidate.createdAt.getTime() ===
+                    chosenCandidate.createdAt.getTime() &&
+                    candidate.userId.localeCompare(chosenCandidate.userId) < 0)))
+            ) {
+              chosenCandidate = candidate;
+            }
+          }
+          chosenCandidate.activeWorkload += 1;
+          return chosenCandidate.userId;
+        });
+      }
+
+      // Revalidate after advisory locks and immediately before assignment writes.
+      for (const researchItemId of lockedResearchItemIds) {
+        const updated = await tx.researchItem.updateMany({
+          where: {
+            id: researchItemId,
+            workspaceId,
+            status: ResearchStatus.READY_FOR_LISTING,
+            listingAssignments: { none: { isCurrent: true } },
+          },
+          data: { updatedAt: new Date() },
+        });
+
+        if (updated.count !== 1) {
+          throw new ApiError(
+            409,
+            "All research items must be unassigned and READY_FOR_LISTING"
+          );
+        }
+      }
+
+      await tx.listingAssignment.createMany({
+        data: input.researchItemIds.map((researchItemId, index) => ({
+          researchItemId,
+          listerId: listerIds[index],
+          isCurrent: true,
+        })),
+      });
+      await tx.notification.createMany({
+        data: input.researchItemIds.map((researchItemId, index) => ({
+          workspaceId,
+          userId: listerIds[index],
+          type: NOTIFICATION_TYPE_LISTING_ASSIGNED,
+          title: "New Design Ready for Listing",
+          message: "You have been assigned to list a new design.",
+          researchItemId,
+        })),
+      });
+
+      return {
+        assignedCount: input.researchItemIds.length,
+        assignedItemIds: input.researchItemIds,
+      };
+    },
+    { maxWait: 15000, timeout: 30000 }
+  );
+};
+
 export const getAdminListingList = async (
   workspaceId: string,
   query: GetAdminListingListQueryInput
 ): Promise<AdminListingListResult> => {
-  const { page, limit, listerId, status, date, search } = query;
+  const { page, limit, listerId, status, date, search, assignment } = query;
 
   const where: Prisma.ResearchItemWhereInput = {
     workspaceId,
@@ -731,6 +1015,11 @@ export const getAdminListingList = async (
       { listingAssignments: { some: { listerId } } },
       { listingResult: { listedById: listerId } },
     ];
+  }
+
+  if (assignment === "UNASSIGNED") {
+    where.status = ResearchStatus.READY_FOR_LISTING;
+    where.listingAssignments = { none: { isCurrent: true } };
   }
 
   if (date) {

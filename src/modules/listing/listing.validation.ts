@@ -108,11 +108,64 @@ export const getAdminListingListQuerySchema = z
       .max(100, "search cannot exceed 100 characters")
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
+    assignment: z.enum(["UNASSIGNED"]).optional(),
   })
   .strict();
 
 export type GetAdminListingListQueryInput = z.infer<
   typeof getAdminListingListQuerySchema
+>;
+
+export const assignListerBodySchema = z
+  .object({
+    listerId: z
+      .string({ message: "listerId is required" })
+      .trim()
+      .min(1, "listerId is required"),
+  })
+  .strict();
+
+export type AssignListerBodyInput = z.infer<typeof assignListerBodySchema>;
+
+const bulkListingItemIdsSchema = z
+  .array(
+    z
+      .string({ message: "research item ID is required" })
+      .trim()
+      .min(1, "research item ID is required")
+  )
+  .min(1, "At least one research item ID is required")
+  .max(100, "Cannot assign more than 100 research items at once")
+  .superRefine((researchItemIds, ctx) => {
+    if (new Set(researchItemIds).size !== researchItemIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "researchItemIds must not contain duplicates",
+      });
+    }
+  });
+
+export const bulkAssignListingBodySchema = z.discriminatedUnion("mode", [
+  z
+    .object({
+      researchItemIds: bulkListingItemIdsSchema,
+      mode: z.literal("TARGET"),
+      listerId: z
+        .string({ message: "listerId is required" })
+        .trim()
+        .min(1, "listerId is required"),
+    })
+    .strict(),
+  z
+    .object({
+      researchItemIds: bulkListingItemIdsSchema,
+      mode: z.literal("DISTRIBUTE"),
+    })
+    .strict(),
+]);
+
+export type BulkAssignListingBodyInput = z.infer<
+  typeof bulkAssignListingBodySchema
 >;
 
 export const getListerListingDetailParamsSchema = z

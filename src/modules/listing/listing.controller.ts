@@ -5,6 +5,8 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as listingService from "./listing.service.js";
 import {
   backfillListingAssignmentsParamsSchema,
+  assignListerBodySchema,
+  bulkAssignListingBodySchema,
   getAdminListingListQuerySchema,
   getListerWorkQueueQuerySchema,
   getListerListingDetailParamsSchema,
@@ -253,6 +255,46 @@ export const getAdminListingList = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Admin listing list retrieved successfully",
+    data: result,
+  });
+};
+
+// Assigns one unassigned READY_FOR_LISTING item to an explicit workspace Lister.
+export const assignLister = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { workspaceId, researchItemId } =
+    getListerListingDetailParamsSchema.parse(req.params);
+  const input = assignListerBodySchema.parse(req.body);
+  const result = await listingService.assignLister(
+    workspaceId,
+    researchItemId,
+    input.listerId
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Lister assigned successfully",
+    data: result,
+  });
+};
+
+// Assigns a selected unassigned listing batch to a target Lister or distributes it fairly.
+export const bulkAssignListers = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+  const input = bulkAssignListingBodySchema.parse(req.body);
+  const result = await listingService.bulkAssignListers(workspaceId, input);
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Listings assigned successfully",
     data: result,
   });
 };

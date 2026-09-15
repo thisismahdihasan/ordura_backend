@@ -13,6 +13,7 @@ import { assignUnassignedResearchBacklog } from "./research.assignment.js";
 import * as researchService from "./research.service.js";
 import {
   createResearchItemSchema,
+  bulkAssignResearchBodySchema,
   getIssueItemsQuerySchema,
   getReferenceImageQuerySchema,
   getResearchItemParamsSchema,
@@ -216,6 +217,29 @@ export const reassignResearchDesigner = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Designer reassigned successfully",
+    data: result,
+  });
+};
+
+// Assigns a selected, currently unassigned RESEARCHED batch to a target Designer or distributes it fairly.
+export const bulkAssignResearchDesigners = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+  const input = bulkAssignResearchBodySchema.parse(req.body);
+
+  const result = await researchService.bulkAssignResearchDesigners(
+    workspaceId,
+    input
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research items assigned successfully",
     data: result,
   });
 };

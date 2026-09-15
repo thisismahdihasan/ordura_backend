@@ -19,7 +19,7 @@ export const listingPaths: OpenApiPathMap = {
       tags: ["Listing"],
       summary: "Get workspace listing operations inventory",
       security: [{ cookieAuth: [] }],
-      description: "ADMIN only. Operational management list of all items in listing workflow stages. Supports filtering by listerId, status, date, and search query.",
+      description: "ADMIN only. Operational management list of all items in listing workflow stages. Supports filtering by listerId, status, date, search query, and assignment. assignment=UNASSIGNED returns only READY_FOR_LISTING items with no current ListingAssignment.",
       parameters: [
         { $ref: "#/components/parameters/WorkspaceId" },
         { $ref: "#/components/parameters/Page" },
@@ -34,6 +34,7 @@ export const listingPaths: OpenApiPathMap = {
           },
           description: "Listing workflow status filter.",
         },
+        { name: "assignment", in: "query", schema: { type: "string", enum: ["UNASSIGNED"] }, description: "Virtual filter that enforces READY_FOR_LISTING status and no current ListingAssignment." },
         { name: "date", in: "query", schema: { type: "string", format: "date", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, description: "Filter items created on this date (YYYY-MM-DD)." },
         { name: "search", in: "query", schema: { type: "string", maxLength: 100 }, description: "Search by title or Etsy listing ID." },
       ],
@@ -162,6 +163,31 @@ export const listingPaths: OpenApiPathMap = {
         "404": jsonError("Research item was not found in this workspace."),
         "409": jsonError("The item has no current assignment or is not in an active listing state."),
       },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/listing/{researchItemId}/lister": {
+    patch: {
+      tags: ["Listing"],
+      summary: "Assign an unassigned listing item to a Lister",
+      security: [{ cookieAuth: [] }],
+      description: "ADMIN only. The item must be READY_FOR_LISTING with no current ListingAssignment. The target must hold LISTER and may be paused or off because explicit assignment bypasses automatic availability. The item remains READY_FOR_LISTING.",
+      parameters: itemParameters,
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["listerId"], properties: { listerId: { type: "string", minLength: 1 } } } } } },
+      responses: { "200": jsonSuccess("Lister assigned successfully.", { type: "object", required: ["researchItem", "assignment"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { type: "string", enum: ["READY_FOR_LISTING"] } } }, assignment: { type: "object", required: ["id", "listerId", "assignedAt", "isCurrent"], properties: { id: { type: "string" }, listerId: { type: "string" }, assignedAt: { type: "string", format: "date-time" }, isCurrent: { type: "boolean" } } } } }), "400": jsonError("Target user is not a workspace Lister."), "401": jsonError("Authentication is required."), "403": jsonError("ADMIN role is required."), "404": jsonError("Research item was not found."), "409": jsonError("Item is assigned or not READY_FOR_LISTING.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/listing/bulk-assign": {
+    post: {
+      tags: ["Listing"],
+      summary: "Bulk assign unassigned listing items",
+      security: [{ cookieAuth: [] }],
+      description: "ADMIN only. Atomic: every item must belong to the workspace, be READY_FOR_LISTING, and have no current ListingAssignment or none are assigned. TARGET assigns a role-valid Lister regardless of availability. DISTRIBUTE uses eligible Listers with least workload, then membership join date and user ID. Maximum 100 items.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      requestBody: { required: true, content: { "application/json": { schema: { oneOf: [
+        { type: "object", additionalProperties: false, required: ["researchItemIds", "mode", "listerId"], properties: { researchItemIds: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: { type: "string", minLength: 1 } }, mode: { type: "string", enum: ["TARGET"] }, listerId: { type: "string", minLength: 1 } } },
+        { type: "object", additionalProperties: false, required: ["researchItemIds", "mode"], properties: { researchItemIds: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: { type: "string", minLength: 1 } }, mode: { type: "string", enum: ["DISTRIBUTE"] } } },
+      ] } } } },
+      responses: { "200": jsonSuccess("Listings assigned successfully.", { type: "object", required: ["assignedCount", "assignedItemIds"], properties: { assignedCount: { type: "integer" }, assignedItemIds: { type: "array", items: { type: "string" } } } }), "400": jsonError("Invalid assignment request or target Lister."), "401": jsonError("Authentication is required."), "403": jsonError("ADMIN role is required."), "404": jsonError("One or more research items were not found."), "409": jsonError("Items are stale, assigned, not READY_FOR_LISTING, or no eligible Listers are available.") },
     },
   },
   "/api/v1/workspaces/{workspaceId}/listing/backfill-assignments": {

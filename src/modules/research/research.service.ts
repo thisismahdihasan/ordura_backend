@@ -3,9 +3,13 @@ import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "./research.helper.js";
 import { fetchEtsyMetadata } from "./research.metadata.js";
-import { findLeastWorkloadDesigner } from "./research.assignment.js";
+import {
+  ACTIVE_DESIGN_STATUSES,
+  findLeastWorkloadDesigner,
+} from "./research.assignment.js";
 import {
   CreateResearchItemInput,
+  BulkAssignResearchBodyInput,
   GetResearchItemsQueryInput,
   PreviewResearchItemInput,
   UpdateResearchItemBodyInput,
@@ -30,6 +34,7 @@ import {
 } from "./research.storage.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
+import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
 
 export const safeResearchItemSelect = {
   id: true,
@@ -408,7 +413,7 @@ export const getResearchItems = async (
   userId: string,
   roles: readonly WorkspaceRole[]
 ): Promise<ResearchItemListResult> => {
-  const { page, limit, createdBy, status, date, search } = query;
+  const { page, limit, createdBy, status, date, search, assignment } = query;
   const isAdmin = roles.includes(WorkspaceRole.ADMIN);
 
   const where: Prisma.ResearchItemWhereInput = {
@@ -422,6 +427,11 @@ export const getResearchItems = async (
 
   if (status) {
     where.status = status;
+  }
+
+  if (assignment === "UNASSIGNED") {
+    where.status = ResearchStatus.RESEARCHED;
+    where.designAssignments = { none: { isCurrent: true } };
   }
 
   if (date) {
@@ -516,6 +526,181 @@ export const getResearchItems = async (
       totalPages,
     },
   };
+};
+
+// Atomically assigns selected, currently unassigned RESEARCHED items to an explicit
+// Designer or distributes them among eligible Designers with deterministic balancing.
+export const bulkAssignResearchDesigners = async (
+  workspaceId: string,
+  input: BulkAssignResearchBodyInput
+) => {
+  return await prisma.$transaction(
+    async (tx) => {
+      const workspaceItemCount = await tx.researchItem.count({
+        where: {
+          workspaceId,
+          id: { in: input.researchItemIds },
+        },
+      });
+
+      if (workspaceItemCount !== input.researchItemIds.length) {
+        throw new ApiError(404, "One or more research items were not found");
+      }
+
+      const lockedResearchItemIds = [...input.researchItemIds].sort((a, b) =>
+        a.localeCompare(b)
+      );
+
+      // Lock and validate every requested item in a deterministic order before
+      // acquiring the workspace member lock, matching the canonical row-first order.
+      for (const researchItemId of lockedResearchItemIds) {
+        const locked = await tx.researchItem.updateMany({
+          where: {
+            id: researchItemId,
+            workspaceId,
+            status: ResearchStatus.RESEARCHED,
+            designAssignments: { none: { isCurrent: true } },
+          },
+          data: { updatedAt: new Date() },
+        });
+
+        if (locked.count !== 1) {
+          throw new ApiError(
+            409,
+            "All research items must be unassigned and in RESEARCHED status"
+          );
+        }
+      }
+
+      await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
+      let designerIds: string[];
+
+      if (input.mode === "TARGET") {
+        const targetMember = await tx.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId,
+              userId: input.designerId,
+            },
+          },
+          select: { roles: true },
+        });
+
+        if (!targetMember?.roles.includes(WorkspaceRole.DESIGNER)) {
+          throw new ApiError(
+            400,
+            "Selected user is not a designer in this workspace"
+          );
+        }
+
+        designerIds = input.researchItemIds.map(() => input.designerId);
+      } else {
+        const eligibleMembers = await tx.workspaceMember.findMany({
+          where: {
+            workspaceId,
+            ...getRoleAssignmentEligibilityFilter(WorkspaceRole.DESIGNER),
+          },
+          select: {
+            userId: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: "asc" }, { userId: "asc" }],
+        });
+
+        if (eligibleMembers.length === 0) {
+          throw new ApiError(409, "No eligible designers are available");
+        }
+
+        const workloadRows = await tx.designAssignment.groupBy({
+          by: ["designerId"],
+          where: {
+            designerId: { in: eligibleMembers.map((member) => member.userId) },
+            isCurrent: true,
+            researchItem: {
+              workspaceId,
+              status: { in: ACTIVE_DESIGN_STATUSES },
+            },
+          },
+          _count: { _all: true },
+        });
+        const workloadByDesignerId = new Map(
+          workloadRows.map((row) => [row.designerId, row._count._all])
+        );
+        const candidates = eligibleMembers.map((member) => ({
+          ...member,
+          activeWorkload: workloadByDesignerId.get(member.userId) ?? 0,
+        }));
+        const [firstCandidate] = candidates;
+
+        if (!firstCandidate) {
+          throw new ApiError(409, "No eligible designers are available");
+        }
+
+        designerIds = input.researchItemIds.map(() => {
+          let chosenCandidate = firstCandidate;
+          for (const candidate of candidates) {
+            if (
+              candidate.activeWorkload < chosenCandidate.activeWorkload ||
+              (candidate.activeWorkload === chosenCandidate.activeWorkload &&
+                (candidate.createdAt < chosenCandidate.createdAt ||
+                  (candidate.createdAt.getTime() ===
+                    chosenCandidate.createdAt.getTime() &&
+                    candidate.userId.localeCompare(chosenCandidate.userId) < 0)))
+            ) {
+              chosenCandidate = candidate;
+            }
+          }
+          chosenCandidate.activeWorkload += 1;
+          return chosenCandidate.userId;
+        });
+      }
+
+      // Revalidate immediately before transitioning state and creating assignments.
+      for (const researchItemId of lockedResearchItemIds) {
+        const updated = await tx.researchItem.updateMany({
+          where: {
+            id: researchItemId,
+            workspaceId,
+            status: ResearchStatus.RESEARCHED,
+            designAssignments: { none: { isCurrent: true } },
+          },
+          data: { status: ResearchStatus.ASSIGNED },
+        });
+
+        if (updated.count !== 1) {
+          throw new ApiError(
+            409,
+            "All research items must be unassigned and in RESEARCHED status"
+          );
+        }
+      }
+
+      await tx.designAssignment.createMany({
+        data: input.researchItemIds.map((researchItemId, index) => ({
+          researchItemId,
+          designerId: designerIds[index],
+          isCurrent: true,
+        })),
+      });
+      await tx.notification.createMany({
+        data: input.researchItemIds.map((researchItemId, index) => ({
+          workspaceId,
+          userId: designerIds[index],
+          type: NOTIFICATION_TYPE_DESIGN_ASSIGNED,
+          title: "Design Assigned",
+          message: "You have been assigned a new design.",
+          researchItemId,
+        })),
+      });
+
+      return {
+        assignedCount: input.researchItemIds.length,
+        assignedItemIds: input.researchItemIds,
+      };
+    },
+    { maxWait: 10000, timeout: 15000 }
+  );
 };
 
 export type ResearchReviewActivityMap = Record<
